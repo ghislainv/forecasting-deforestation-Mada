@@ -18,6 +18,7 @@ virtualenv_create("r-reticulate")
 # Install deforestprob
 virtualenv_install("r-reticulate", "deforestprob")
 # Import deforestprob
+Sys.unsetenv("DISPLAY")  # Remove DISPLAY
 dfp <- import("deforestprob")
 
 # ===============================
@@ -96,11 +97,6 @@ mod_binomial_iCAR <- dfp$model_binomial_iCAR(
 # py_save_object(mod_binomial_iCAR, "output/mod_binomial_iCAR.pkl",
 # 							 pickle = "pickle")
 
-# Import matplotlib with agg backend
-virtualenv_install("r-reticulate", "matplotlib")
-plt <- import("matplotlib.pyplot")
-plt$switch_backend("agg")
-
 # Summary
 sink(file="output/summary_mod_binomial_iCAR.txt")
 print(mod_binomial_iCAR)
@@ -133,7 +129,7 @@ dfp$plot$rho("output/rho.tif",output_file="output/rho.png")
 # ========================================================
 
 # Compute predictions
-fig_pred <- dfp$predict(mod_binomial_iCAR, var_dir="data",
+fig_pred <- dfp$predict_raster_binomial_iCAR(mod_binomial_iCAR, var_dir="data",
 											  input_cell_raster="output/rho.tif",
 											  input_forest_raster="data/fordefor2010.tif",
 											  output_file="output/pred_binomial_iCAR.tif",
@@ -162,6 +158,7 @@ dfp$plot$fcc("output/forest_cover_2050.tif",output_file="output/forest_cover_205
 virtualenv_install("r-reticulate", c("patsy","statsmodels"))
 patsy <- import("patsy")
 sm <- import("statsmodels.api")
+smf <- import("statsmodels.formula.api")
 
 # Full model
 deviance_full <- 0
@@ -172,20 +169,15 @@ dmat_null <- patsy$dmatrices(formula_null, data=r_to_py(dataset_nona), NA_action
 											 return_type="dataframe", eval_env=-1L)
 Y <- dmat_null[[1]]
 X_null <- dmat_null[[2]]
-mod_null <- sm$GLM(Y, X_null, family = sm$families$Binomial())
-fit_null <- mod_null$fit()
-deviance_null <- fit_null$deviance
+mod_null <- sm$GLM(Y, X_null, family=sm$families$Binomial()).fit()
+deviance_null <- mod_null$deviance
 
 # Model with no spatial random effects
-formula_nsre = "I(1-fordefor2010) ~ C(sapm) + scale(altitude) +  scale(slope) + \
-scale(dist_defor) + np.power(scale(dist_defor),2) + scale(dist_edge) + scale(dist_road) + scale(dist_town)"
-dmat_nsre <- patsy$dmatrices(formula_nsre, data=r_to_py(dataset_nona), NA_action="drop",
-														return_type="dataframe", eval_env=-1L)
-Y <- dmat_nsre[[1]]
-X_nsre <- dmat_nsre[[2]]
-mod_nsre <- sm$GLM(Y, X_nsre, family = sm$families$Binomial())
-fit_nsre <- mod_nsre$fit()
-deviance_nsre <- fit_nsre$deviance
+formula_nsre = paste0("I(1-fordefor2010) ~ C(sapm) + scale(altitude) + ",
+											"scale(slope) + scale(dist_defor) + scale(dist_defor)*scale(dist_defor) + ",
+											"scale(dist_edge) + scale(dist_road) + scale(dist_town)")
+mod_nsre <- smf$glm(formula_nsre, r_to_py(dataset_nona), family=sm$families$Binomial(), eval_env=-1L)$fit()
+deviance_nsre <- mod_nsre$deviance
 
 # Model with iCAR process
 deviance_icar <- mod_binomial_iCAR$Deviance
@@ -198,7 +190,24 @@ perc <- 100*(1-mod$deviance/deviance_null)
 mod$perc <- round(perc)
 write.table(mod,file="output/deviance_model_comparison.txt",sep=",",row.names=FALSE)
 
+# Compute predictions with logistic regression
+fig_pred_nsre <- dfp$predict_raster(mod_nsre, var_dir="data",
+																		input_forest_raster="data/fordefor2010.tif",
+																		output_file="output/pred_nsre.tif",
+																		blk_rows=128L, transform=TRUE)
 
+# Plot predictions
+dfp$plot$prob("output/pred_nsre.tif",output_file="output/pred_nsre.png")
 
+# Future forest cover
+forest_cover_nsre <- dfp$deforest(input_raster="output/pred_nsre.tif",
+														 hectares=4000000,
+														 output_file="output/forest_cover_2050_nsre.tif",
+														 blk_rows=128L)
 
+# Plot future forest cover
+dfp$plot$fcc("output/forest_cover_2050_nsre.tif",output_file="output/forest_cover_2050_nsre.png")
 
+# ========================================================
+# End
+# ========================================================
