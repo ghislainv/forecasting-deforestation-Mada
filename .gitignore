@@ -2,6 +2,9 @@
 data
 output
 
+# Python virtual env
+r-reticulate
+
 # Rproj
 *.Rproj
 
