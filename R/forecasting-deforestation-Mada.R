@@ -268,7 +268,7 @@ correlation <- round(100*cor(x=corr_10km$pred_d_ha, y=corr_10km$obs_d_ha, method
 # ====================================================
 
 # Download
-if (!file.exists("data/for2014.tif")) {
+if (!file.exists("output/for2014.tif")) {
   f <- "http://bioscenemada.cirad.fr/FileTransfer/for2014.tif"
   curl_download(f, "output/for2014.tif", quiet=FALSE)
 }
@@ -299,13 +299,21 @@ fcc_iCAR_2014 <- dfp$deforest(input_raster="output/pred_binomial_iCAR.tif",
                               output_file="output/fcc_2014_iCAR.tif",
                               blk_rows=128L)
 
-# Correlation between maps at ~10km
+# Correlation between maps at ~10km2
 val_iCAR_df <- dfp$validation_npix(r_pred="output/fcc_2014_iCAR.tif",
                                    r_obs="output/fcc_2010_2014_obs.tif",
                                    output_file="output/npix_iCAR.txt", 
                                    value_f=1,
                                    value_d=0,
                                    square_size=333L)
+
+# Correlation between maps at ~20km2
+val_iCAR_df <- dfp$validation_npix(r_pred="output/fcc_2014_iCAR.tif",
+                                   r_obs="output/fcc_2010_2014_obs.tif",
+                                   output_file="output/npix_iCAR.txt", 
+                                   value_f=1,
+                                   value_d=0,
+                                   square_size=666L)
 
 # Tidy dataset
 val_iCAR <- val_iCAR_df %>%
@@ -320,7 +328,7 @@ pred_obs_iCAR <- ggplot(val_iCAR, aes(obs_d_ha,pred_d_ha)) +
 ggsave("output/plot_pred_obs_iCAR.pdf", pred_obs_iCAR)
 
 # Model
-correlation <- round(100*cor(x=val_iCAR$pred_d_ha, y=val_iCAR$obs_d_ha, method=c("pearson")))
+corr_iCAR <- round(100*cor(x=val_iCAR$pred_d_ha, y=val_iCAR$obs_d_ha, method=c("pearson")))
 
 # ==============
 # Comp with nsre
@@ -352,7 +360,12 @@ pred_obs_nsre <- ggplot(val_nsre, aes(obs_d_ha,pred_d_ha)) +
 ggsave("output/plot_pred_obs_nsre.pdf", pred_obs_nsre)
 
 # Model
-correlation <- round(100*cor(x=val_nsre$pred_d_ha, y=val_nsre$obs_d_ha, method=c("pearson")))
+corr_nsre <- round(100*cor(x=val_nsre$pred_d_ha, y=val_nsre$obs_d_ha, method=c("pearson")))
+
+# Backup correlation estimates
+corr_df <- data.frame(model=c("nsre","iCAR"),
+                     corr=c(corr_nsre,corr_iCAR))
+write.table(corr_df,"output/corr_df",row.names=FALSE,sep=",")
 
 # ========================================================
 # End
