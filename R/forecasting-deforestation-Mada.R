@@ -30,10 +30,7 @@ if (!dir.exists("r-reticulate")) {
   virtualenv_create("r-reticulate")
   # Install Python modules
   virtualenv_install("r-reticulate",
-                     c("patsy","statsmodels"))
-  # virtualenv_remove("r-reticulate","deforestprob")
-  virtualenv_install("r-reticulate","deforestprob",
-                     ignore_installed=TRUE)
+                     c("patsy","statsmodels","deforestprob"))
 }
 
 # Use virtual env
@@ -117,7 +114,7 @@ dataset_nona <- dataset %>%
 	dplyr::filter(complete.cases(dataset))
 
 # Spatial cells for spatial-autocorrelation
-neighborhood <- dfp$cellneigh(raster="data/fordefor2010.tif", csize=10L, rank=1L)
+neighborhood <- dfp$cellneigh(raster="data/model/fordefor2010.tif", csize=10L, rank=1L)
 nneigh <- neighborhood[[1]]
 adj <- neighborhood[[2]]
 
@@ -163,7 +160,7 @@ traces_fig <- mod_binomial_iCAR$plot(output_file="output/mcmc.pdf",
 rho <- mod_binomial_iCAR$rho
 
 # Resample
-dfp$resample_rho(rho=rho, input_raster="data/fordefor2010.tif",
+dfp$resample_rho(rho=rho, input_raster="data/model/fordefor2010.tif",
 								 output_file="output/rho.tif",
 								 csize_orig=10, csize_new=1)
 
@@ -176,7 +173,7 @@ dfp$plot$rho("output/rho.tif",output_file="output/rho.png")
 # ========================================================
 
 # Compute predictions
-fig_pred <- dfp$predict_raster_binomial_iCAR(mod_binomial_iCAR, var_dir="data",
+fig_pred <- dfp$predict_raster_binomial_iCAR(mod_binomial_iCAR, var_dir="data/model",
 											  input_cell_raster="output/rho.tif",
 											  input_forest_raster="data/model/fordefor2010.tif",
 											  output_file="output/pred_binomial_iCAR.tif",
@@ -222,7 +219,6 @@ deviance_nsre <- mod_nsre$deviance
 
 # ================
 # Accuracy indices
-
 
 # 1. iCAR model
 dataset_nona$pred <- 0
@@ -301,7 +297,7 @@ write.table(mod,file="output/deviance_model_comparison.txt",sep=",",row.names=FA
 # Model deviances
 
 # Compute predictions with logistic regression
-fig_pred_nsre <- dfp$predict_raster(mod_nsre, var_dir="data",
+fig_pred_nsre <- dfp$predict_raster(mod_nsre, var_dir="data/model",
 																		input_forest_raster="data/model/fordefor2010.tif",
 																		output_file="output/pred_nsre.tif",
 																		blk_rows=128L, transform=TRUE)

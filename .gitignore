@@ -1,6 +1,7 @@
 # data and output
 data
 output
+*.log
 
 # Python virtual env
 r-reticulate
