@@ -7,6 +7,9 @@
 # license         :GPLv3
 # ==============================================================================
 
+# Anaconda2 must be installed
+# https://conda.io/docs/user-guide/install/index.html
+
 # Libraries
 require(reticulate)
 require(glue)
@@ -21,20 +24,26 @@ require(rgdal)
 # Setup Python virtual environment
 # ================================
 
-# Set directory for virtual env
-Sys.setenv(WORKON_HOME=getwd())
+# Force the use of miniconda2 python 2.7
+#use_python("/home/ghislain/miniconda2/bin/python", required=TRUE)
+#py_config()
 
-# Create virtual env if necessary
-if (!dir.exists("r-reticulate")) {
-  # Create
-  virtualenv_create("r-reticulate")
-  # Install Python modules
-  virtualenv_install("r-reticulate",
-                     c("patsy","statsmodels","deforestprob"))
+# Create conda virtual environment
+if (!("r-reticulate" %in% conda_list()$name)) {
+  conda_create("r-reticulate","python=2.7")
+	# Install/Update Python modules
+	module_list <- c("pip","numpy","statsmodels","gdal=2.1.0",
+									 "earthengine-api","google-cloud-storage")
+	conda_install("r-reticulate",module_list)
 }
 
-# Use virtual env
-use_virtualenv("r-reticulate")
+# Install deforestprob from git with pip
+git_deforestprob <- "https://github.com/ghislainv/deforestprob/archive/master.zip"
+conda_install("r-reticulate",git_deforestprob,pip=TRUE,pip_ignore_installed=TRUE)
+py_discover_config("deforestprob","r-reticulate")
+
+# Use conda env
+use_condaenv("r-reticulate", required=TRUE)
 
 # Import Python modules
 Sys.unsetenv("DISPLAY") # Remove DISPLAY for Python plot
@@ -114,7 +123,9 @@ dataset_nona <- dataset %>%
 	dplyr::filter(complete.cases(dataset))
 
 # Spatial cells for spatial-autocorrelation
-neighborhood <- dfp$cellneigh(raster="data/model/fordefor2010.tif", csize=10L, rank=1L)
+neighborhood <- dfp$cellneigh_ctry(raster="data/model/fordefor2010.tif",
+																	 vector="data/mada/MAD_outline.shp",
+																	 csize=10L, rank=1L)
 nneigh <- neighborhood[[1]]
 adj <- neighborhood[[2]]
 
@@ -212,10 +223,16 @@ deviance_null <- mod_null$deviance
 
 # Model with no spatial random effects
 formula_nsre <- paste0("I(1-fordefor2010) ~ C(sapm) + scale(altitude) + ",
-											"scale(slope) + scale(dist_defor) + scale(dist_defor)*scale(dist_defor) + ",
+											"scale(slope) + scale(dist_defor) + I(scale(dist_defor)*scale(dist_defor)) + ",
 											"scale(dist_edge) + scale(dist_road) + scale(dist_town)")
 mod_nsre <- smf$glm(formula_nsre, r_to_py(dataset_nona), family=sm$families$Binomial(), eval_env=-1L)$fit()
 deviance_nsre <- mod_nsre$deviance
+
+# Summary nsre
+sink(file="output/summary_mod_binomial_nsre.txt")
+print(mod_nsre$summary())
+sink()
+
 
 # ================
 # Accuracy indices
@@ -427,7 +444,7 @@ zoom1 <- gplot(r_zoom1,maxpixels=10e5) +
 ggsave("output/diff_zoom1.png", zoom1)
 
 # Zoom 2
-zoom2 <- gplot(r_zoom2,maxpixels=10e4) +
+zoom2 <- gplot(r_zoom2,maxpixels=10e5) +
   geom_polygon(data=mada.df, aes(x=long, y=lat, group=id), colour="black", fill="white", size=0.3) +
   geom_raster(aes(fill=factor(value))) +
   scale_fill_manual(values=c("red","forestgreen","blue"), na.value="transparent") +
