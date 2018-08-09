@@ -28,26 +28,29 @@ require(rgdal)
 #use_python("/home/ghislain/miniconda2/bin/python", required=TRUE)
 #py_config()
 
-# Create conda virtual environment
-if (!("r-reticulate" %in% conda_list()$name)) {
-  conda_create("r-reticulate","python=2.7")
-	# Install/Update Python modules
-	module_list <- c("pip","numpy","statsmodels","gdal=2.1.0",
-									 "earthengine-api","google-cloud-storage")
-	conda_install("r-reticulate",module_list)
-}
+# # Create conda virtual environment
+# if (!("r-reticulate" %in% conda_list()$name)) {
+# 	# Python 2.7
+#   conda_create("r-reticulate","python=2.7")
+# 	# Conda install with use of conda-forge
+# 	conda_modules <- c("pip","gdal","numpy","scipy","statsmodels")
+# 	conda_install("r-reticulate",conda_modules,forge=TRUE)
+# }
+# 
+# # Install deforestprob from git with pip
+# git_deforestprob <- "https://github.com/ghislainv/deforestprob/archive/master.zip"
+# conda_install("r-reticulate",git_deforestprob,pip=TRUE,pip_ignore_installed=FALSE)
+# py_discover_config("deforestprob","r-reticulate")
+# 
+# # Use conda env
+# use_condaenv("r-reticulate", required=TRUE)
 
-# Install deforestprob from git with pip
-git_deforestprob <- "https://github.com/ghislainv/deforestprob/archive/master.zip"
-conda_install("r-reticulate",git_deforestprob,pip=TRUE,pip_ignore_installed=TRUE)
-py_discover_config("deforestprob","r-reticulate")
-
-# Use conda env
-use_condaenv("r-reticulate", required=TRUE)
-
+# ================================
 # Import Python modules
+# ================================
+
 Sys.unsetenv("DISPLAY") # Remove DISPLAY for Python plot
-dfp <- import("deforestprob")
+dfp <- import("deforestprob") # Disregard warnings
 patsy <- import("patsy")
 sm <- import("statsmodels.api")
 smf <- import("statsmodels.formula.api")
