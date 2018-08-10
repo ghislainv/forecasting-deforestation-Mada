@@ -88,10 +88,10 @@ if (!file.exists("data/validation/for2014.tif")) {
 }
 
 # Download mada outline
-if (!file.exists("data/mada/MAD_outline.shp")) {
-  f <- "http://bioscenemada.cirad.fr/FileTransfer/MAD_outline.zip"
-  curl_download(f, "data/mada/MAD_outline.zip", quiet=FALSE)
-  unzip("data/mada/MAD_outline.zip", exdir="data/mada")
+if (!file.exists("data/mada/mada38s.shp")) {
+  f <- "http://bioscenemada.cirad.fr/FileTransfer/mada38s.zip"
+  curl_download(f, "data/mada/mada38s.zip", quiet=FALSE)
+  unzip("data/mada/mada38s.zip", exdir="data/mada")
 }
 
 # ========================================================
@@ -127,16 +127,25 @@ dataset_nona <- dataset %>%
 
 # Spatial cells for spatial-autocorrelation
 neighborhood <- dfp$cellneigh_ctry(raster="data/model/fordefor2010.tif",
-																	 vector="data/mada/MAD_outline.shp",
+																	 vector="data/mada/mada38s.shp",
 																	 csize=10L, rank=1L)
 nneigh <- neighborhood[[1]]
 adj <- neighborhood[[2]]
+cell_in <- neighborhood[[3]]
+ncell <- neighborhood[[4]]
+
+# Udpate cell number in dataset
+cell_rank <- vector()
+for (i in 1:nrow(dataset_nona)) {
+	cell_rank[i] <- which(cell_in==dataset_nona$cell[i])-1 # ! cells start at zero
+}
+dataset_nona$cell_rank <- cell_rank
 
 # Formula
 formula <- paste0("I(1-fordefor2010) + trials ~ C(sapm) + scale(altitude) + scale(slope) +",
 									"scale(dist_defor) + np.power(scale(dist_defor),2) + ",
 									"scale(dist_edge) + ",
-									"scale(dist_road) + scale(dist_town) + cell")
+									"scale(dist_road) + scale(dist_town) + cell_rank")
 
 # Model
 mod_binomial_iCAR <- dfp$model_binomial_iCAR(
@@ -160,7 +169,7 @@ sink(file="output/summary_mod_binomial_iCAR.txt")
 print(mod_binomial_iCAR)
 sink()
 
-# Plot traces and posteriors (try to fix warnings !!)
+# Plot traces and posteriors
 traces_fig <- mod_binomial_iCAR$plot(output_file="output/mcmc.pdf",
 																		 plots_per_page=3L,
 																		 figsize=c(9,6),
@@ -171,16 +180,21 @@ traces_fig <- mod_binomial_iCAR$plot(output_file="output/mcmc.pdf",
 # ========================================================
 
 # Spatial random effects
-rho <- mod_binomial_iCAR$rho
+rho <- rep(-9999,ncell)  # -9999 will be considered as nodata
+rho[cell_in+1] <- mod_binomial_iCAR$rho
 
 # Resample
 dfp$resample_rho(rho=rho, input_raster="data/model/fordefor2010.tif",
 								 output_file="output/rho.tif",
-								 csize_orig=10, csize_new=1)
+								 csize_orig=10L, csize_new=1L)
 
 # Plot random effects
 dfp$plot$rho("output/rho_orig.tif",output_file="output/rho_orig.png")
 dfp$plot$rho("output/rho.tif",output_file="output/rho.png")
+
+# Plot with R
+r.rho <- raster("output/rho_orig.tif")
+plot(r.rho)
 
 # ========================================================
 # Predicting spatial probability of deforestation
