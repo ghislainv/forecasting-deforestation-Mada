@@ -10,6 +10,10 @@
 # Anaconda2 must be installed
 # https://conda.io/docs/user-guide/install/index.html
 
+# Environmental variables
+Sys.setenv(RETICULATE_PYTHON="/usr/bin/python")
+Sys.unsetenv("DISPLAY") # Remove DISPLAY for Python plot
+
 # Libraries
 require(reticulate)
 require(glue)
@@ -18,15 +22,16 @@ require(dplyr)
 require(broom)
 require(ggplot2)
 require(rasterVis)
-require(rgdal)
+#require(rgdal)
 
 # ================================
 # Setup Python virtual environment
 # ================================
 
-# Force the use of miniconda2 python 2.7
-#use_python("/home/ghislain/miniconda2/bin/python", required=TRUE)
-#py_config()
+# # Force the use of miniconda2 python 2.7
+
+# use_python("/usr/bin/python", required=TRUE)
+# py_config()
 
 # # Create conda virtual environment
 # if (!("r-reticulate" %in% conda_list()$name)) {
@@ -41,7 +46,7 @@ require(rgdal)
 # git_deforestprob <- "https://github.com/ghislainv/deforestprob/archive/master.zip"
 # conda_install("r-reticulate",git_deforestprob,pip=TRUE,pip_ignore_installed=FALSE)
 # py_discover_config("deforestprob","r-reticulate")
-# 
+
 # # Use conda env
 # use_condaenv("r-reticulate", required=TRUE)
 
@@ -49,7 +54,6 @@ require(rgdal)
 # Import Python modules
 # ================================
 
-Sys.unsetenv("DISPLAY") # Remove DISPLAY for Python plot
 dfp <- import("deforestprob") # Disregard warnings
 patsy <- import("patsy")
 sm <- import("statsmodels.api")
@@ -184,7 +188,7 @@ rho <- rep(-9999,ncell)  # -9999 will be considered as nodata
 rho[cell_in+1] <- mod_binomial_iCAR$rho
 
 # Resample
-dfp$resample_rho(rho=rho, input_raster="data/model/fordefor2010.tif",
+dfp$plot$resample_rho(rho=r_to_py(rho), input_raster="data/model/fordefor2010.tif",
 								 output_file="output/rho.tif",
 								 csize_orig=10L, csize_new=1L)
 
