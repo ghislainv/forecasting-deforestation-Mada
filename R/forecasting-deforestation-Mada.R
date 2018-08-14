@@ -143,13 +143,13 @@ cell_rank <- vector()
 for (i in 1:nrow(dataset_nona)) {
 	cell_rank[i] <- which(cell_in==dataset_nona$cell[i])-1 # ! cells start at zero
 }
-dataset_nona$cell_rank <- cell_rank
+dataset_nona$cell <- cell_rank
 
 # Formula
 formula <- paste0("I(1-fordefor2010) + trials ~ C(sapm) + scale(altitude) + scale(slope) +",
 									"scale(dist_defor) + np.power(scale(dist_defor),2) + ",
 									"scale(dist_edge) + ",
-									"scale(dist_road) + scale(dist_town) + cell_rank")
+									"scale(dist_road) + scale(dist_town) + cell")
 
 # Model
 mod_binomial_iCAR <- dfp$model_binomial_iCAR(
@@ -164,9 +164,11 @@ mod_binomial_iCAR <- dfp$model_binomial_iCAR(
 	# Starting values
 	beta_start=-99)
 
-# Save model (not yet supported)
-# py_save_object(mod_binomial_iCAR, "output/mod_binomial_iCAR.pkl",
-# 							 pickle = "pickle")
+# # Save model specifications
+# model <- list(_x_design_info=mod_binomial_iCAR$"_x_design_info",
+# 							 betas=mod_binomial_iCAR$betas)
+# py_save_object(model, "output/model.pkl",
+#  							 pickle = "pickle")
 
 # Summary
 sink(file="output/summary_mod_binomial_iCAR.txt")
@@ -188,7 +190,7 @@ rho <- rep(-9999,ncell)  # -9999 will be considered as nodata
 rho[cell_in+1] <- mod_binomial_iCAR$rho
 
 # Resample
-dfp$plot$resample_rho(rho=r_to_py(rho), input_raster="data/model/fordefor2010.tif",
+dfp$resample_rho(rho=r_to_py(rho), input_raster="data/model/fordefor2010.tif",
 								 output_file="output/rho.tif",
 								 csize_orig=10L, csize_new=1L)
 
@@ -197,8 +199,19 @@ dfp$plot$rho("output/rho_orig.tif",output_file="output/rho_orig.png")
 dfp$plot$rho("output/rho.tif",output_file="output/rho.png")
 
 # Plot with R
+source("R/ggplot_specifications.R")
 r.rho <- raster("output/rho_orig.tif")
-plot(r.rho)
+rho_quantiles <- quantile(values(r.rho),c(0.025,0.975),na.rm=TRUE) 
+rho_bound <- max(sqrt(rho_quantiles^2))
+rho_limits <- c(-rho_bound,rho_bound)
+rho_plot <- gplot(r.rho) +
+	geom_raster(aes(fill=value)) +
+	scale_fill_gradientn(colours=c("forestgreen","yellow","red"),na.value="transparent",
+											 limits=rho_limits, oob=scales::squish) +
+	geom_polygon(data=mada.df, aes(x=long, y=lat, group=id), colour="black", fill="transparent", size=0.3) +
+	theme_bw() + theme_base +
+	coord_equal(xlim=c(300000,1100000),ylim=c(7165000,8685000))
+ggsave("output/rho_orig_ggplot.png", rho_plot, width=4.5, height=8)
 
 # ========================================================
 # Predicting spatial probability of deforestation
@@ -396,33 +409,6 @@ system(paste0("gdal_calc.py --overwrite -A output/forest_cover_2050.tif -B outpu
 
 # Data
 r_diff <- raster("output/diff_iCAR_nsre_2050.tif")
-mada.latlong <- readOGR(dsn="data/mada",layer="MAD_outline")
-proj4string(mada.latlong) <- "+init=epsg:4326"
-mada <- spTransform(mada.latlong,CRSobj=CRS("+init=epsg:32738"))
-mada.df <- tidy(mada)
-
-# Theme
-## Setting basic theme options for plot with ggplot2
-theme_base <- theme(axis.line=element_blank(),
-                    axis.text.x=element_blank(),
-                    axis.text.y=element_blank(),
-                    axis.ticks=element_blank(),
-                    axis.title.x=element_blank(),
-                    axis.title.y=element_blank(),
-                    legend.position="none",
-                    plot.margin=unit(c(0,0,0,0),"null"),
-                    panel.spacing=unit(c(0,0,0,0),"null"),
-                    plot.background=element_rect(fill="transparent"),
-                    panel.background=element_rect(fill="transparent"),
-                    panel.grid.major=element_blank(),
-                    panel.grid.minor=element_blank(),
-                    panel.border=element_blank())
-
-# Zooms
-zoom1 <- list(xmin=346000,xmax=439000,ymin=7387000,ymax=7480000)
-zoom2 <- list(xmin=793000,xmax=886000,ymin=7815000,ymax=7908000)
-Extent.zoom1 <- paste(zoom1$xmin,zoom1$ymin,zoom1$xmax,zoom1$ymax)
-Extent.zoom2 <- paste(zoom2$xmin,zoom2$ymin,zoom2$xmax,zoom2$ymax)
 
 system(paste0("gdalwarp -overwrite -dstnodata 255 \\
           -r near -tr 30 30 \\
