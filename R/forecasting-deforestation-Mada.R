@@ -24,6 +24,9 @@ require(ggplot2)
 require(rasterVis)
 #require(rgdal)
 
+# Source R plotting functions
+source("R/dfp_plot.R")
+
 # ================================
 # Setup Python virtual environment
 # ================================
@@ -199,19 +202,13 @@ dfp$plot$rho("output/rho_orig.tif",output_file="output/rho_orig.png")
 dfp$plot$rho("output/rho.tif",output_file="output/rho.png")
 
 # Plot with R
-source("R/ggplot_specifications.R")
-r.rho <- raster("output/rho_orig.tif")
-rho_quantiles <- quantile(values(r.rho),c(0.025,0.975),na.rm=TRUE) 
-rho_bound <- max(sqrt(rho_quantiles^2))
-rho_limits <- c(-rho_bound,rho_bound)
-rho_plot <- gplot(r.rho) +
-	geom_raster(aes(fill=value)) +
-	scale_fill_gradientn(colours=c("forestgreen","yellow","red"),na.value="transparent",
-											 limits=rho_limits, oob=scales::squish) +
-	geom_polygon(data=mada.df, aes(x=long, y=lat, group=id), colour="black", fill="transparent", size=0.3) +
-	theme_bw() + theme_base +
-	coord_equal(xlim=c(300000,1100000),ylim=c(7165000,8685000))
-ggsave("output/rho_orig_ggplot.png", rho_plot, width=4.5, height=8)
+mada <- rgdal::readOGR(dsn="data/mada",layer="mada38s")
+r.rho_orig <- raster("output/rho_orig.tif")
+r.rho <- raster("output/rho.tif")
+rho_plot(r.rho_orig, mada, output_file="output/rho_orig_ggplot.png",
+				 quantiles_legend=c(0.025,0.975),width=4.5, height=8)
+rho_plot(r.rho, mada, output_file="output/rho_ggplot.png",
+				 quantiles_legend=c(0.025,0.975),width=4.5, height=8)
 
 # ========================================================
 # Predicting spatial probability of deforestation
@@ -344,8 +341,9 @@ perc <- 100*(1-mod$deviance/deviance_null)
 mod$perc <- round(perc)
 write.table(mod,file="output/deviance_model_comparison.txt",sep=",",row.names=FALSE)
 
-# ===============
-# Model deviances
+# =================
+# Model differences
+# =================
 
 # Compute predictions with logistic regression
 fig_pred_nsre <- dfp$predict_raster(mod_nsre, var_dir="data/model",
@@ -371,16 +369,66 @@ corr_10km_df <- dfp$validation_npix(r_pred="output/forest_cover_2050.tif",
                                     output_file="output/npix.txt", 
                                     value_f=1,
                                     value_d=0,
-                                    square_size=333L)
+                                    square_size=33L)
 
 # Function to convert pixels to hectares
 npix2ha <- function(npix,res=30) {return(npix*res*res/10000)}
 
 # Tidy dataset
 corr_10km <- corr_10km_df %>%
-  dplyr::filter(!(obs_f== 0 & obs_d==0)) %>% # Remove squares with no forest
-  dplyr::mutate(obs_d_ha=npix2ha(obs_d),pred_d_ha=npix2ha(pred_d),
-                obs_f_ha=npix2ha(obs_f),pred_f_ha=npix2ha(pred_f))
+  dplyr::mutate(obs_f_ha=npix2ha(obs_f),pred_f_ha=npix2ha(pred_f),
+  							obs_d_ha=npix2ha(obs_d),pred_d_ha=npix2ha(pred_d)) %>%
+	dplyr::mutate(box0=0:(nrow(corr_10km_df)-1)) %>%
+	dplyr::filter(!(obs_f== 0 & obs_d==0)) # Remove squares with no forest
+
+# Coordinates of the centers of the 10-km boxes
+e <- extent(raster("output/forest_cover_2050.tif"))
+box_size0 <- 30*33
+ncol <- ceiling((xmax(e)-xmin(e))/box_size0)
+nrow <- ceiling((ymax(e)-ymin(e))/box_size0)
+y_box <- floor(corr_10km$box0/ncol) # quotient
+x_box <- corr_10km$box0 %% ncol # remainder
+y <- ymax(e)-box_size0*(y_box+0.5)
+x <- xmin(e)+box_size0*(x_box+0.5)
+# Box number from x,y coordinates and box size
+coeff <- c(1,2,5,10,15,25,50,75,100,150)
+box_size <- box_size0 * coeff # box_size in m
+CV <- R2 <- Cor <- vector()
+CV_f <- function(obs,pred) {
+	RMSE <- sqrt(mean((obs-pred)^2))
+	Mean <- mean(obs)
+	return(RMSE/Mean)
+}
+R2_f <- function(obs,pred) {
+	sum1 <- sum((obs-pred)^2)
+	sum2 <- sum((obs-mean(obs))^2)
+	return(1-sum1/sum2)
+}
+for (i in 1:length(box_size)) {
+	# Box size
+	b <- box_size[i]
+	# Number of boxes
+	ncol <- ceiling((xmax(e)-xmin(e))/b)
+	nrow <- ceiling((ymax(e)-ymin(e))/b)
+	nbox <- ncol * nrow
+	# Box identification
+  J <- floor((x - xmin(e)) / b)
+  I <- floor((ymax(e) - y) / b)
+  box <- I * ncol + J
+  # Sum deforested areas by box
+  obs_d <- corr_10km %>% mutate(box=box) %>%
+  	group_by(box) %>% summarise(sum_obs_d_ha=sum(obs_d_ha)) %>%
+  	pull(sum_obs_d_ha)
+  pred_d <- corr_10km %>% mutate(box=box) %>%
+  	group_by(box) %>% summarise(sum_pred_d_ha=sum(pred_d_ha)) %>%
+  	pull(sum_pred_d_ha)
+  CV[i] <- CV_f(obs_d,pred_d)
+  R2[i] <- R2_f(obs_d,pred_d)
+  Cor[i] <- cor(obs_d,pred_d)
+}
+plot(coeff,CV,type="l",xlab="Box size (km)")
+plot(coeff,R2,type="l",xlab="Box size (km)")
+plot(coeff,Cor,type="l",xlab="Box size (km)")
 
 # Check same number of forest and deforestation
 f_tot_obs <- sum(corr_10km$obs_d_ha + corr_10km$obs_f_ha)
@@ -497,30 +545,65 @@ val_iCAR_df <- dfp$validation_npix(r_pred="output/fcc_2014_iCAR.tif",
                                    output_file="output/npix_iCAR.txt", 
                                    value_f=1,
                                    value_d=0,
-                                   square_size=333L)
+                                   square_size=33L)
 
 # Tidy dataset
 val_iCAR <- val_iCAR_df %>%
-  dplyr::filter(!(obs_f== 0 & obs_d==0)) %>% # Remove squares with no forest
-  dplyr::mutate(obs_d_ha=npix2ha(obs_d),pred_d_ha=npix2ha(pred_d),
-                obs_f_ha=npix2ha(obs_f),pred_f_ha=npix2ha(pred_f))
-write.table(val_iCAR,"output/val_iCAR.txt",row.names=FALSE,sep=",")
+	dplyr::mutate(obs_f_ha=npix2ha(obs_f),pred_f_ha=npix2ha(pred_f),
+								obs_d_ha=npix2ha(obs_d),pred_d_ha=npix2ha(pred_d)) %>%
+	dplyr::mutate(box0=0:(nrow(val_iCAR_df)-1)) %>%
+	dplyr::filter(!(obs_f==0 & obs_d==0)) # Remove squares with no forest
 
-# Check same number of forest and deforestation
-f_tot_obs <- sum(val_iCAR$obs_d_ha + val_iCAR$obs_f_ha)
-f_tot_pred <- sum(val_iCAR$pred_d_ha + val_iCAR$pred_f_ha)
-d_tot_obs <- sum(val_iCAR$obs_d_ha)
-d_tot_pred <- sum(val_iCAR$pred_d_ha)
-
-# Plot
-pred_obs_iCAR <- ggplot(val_iCAR, aes(obs_d_ha,pred_d_ha)) +
-  geom_point(alpha=0.1) +
-  geom_smooth() + geom_abline(intercept=0, slope=1) +
-  coord_equal(xlim=c(0,1000), ylim=c(0,1000))
-ggsave("output/plot_pred_obs_iCAR.pdf", pred_obs_iCAR)
-
-# Model
-corr_iCAR <- round(100*cor(x=val_iCAR$pred_d_ha, y=val_iCAR$obs_d_ha, method=c("pearson")))
+# Coordinates of the centers of the 10-km boxes
+e <- extent(raster("output/fcc_2014_iCAR.tif"))
+box_size0 <- 30*33
+ncol <- ceiling((xmax(e)-xmin(e))/box_size0)
+nrow <- ceiling((ymax(e)-ymin(e))/box_size0)
+y_box <- floor(val_iCAR$box0/ncol) # quotient
+x_box <- val_iCAR$box0 %% ncol # remainder
+y <- ymax(e)-box_size0*(y_box+0.5)
+x <- xmin(e)+box_size0*(x_box+0.5)
+# Box number from x,y coordinates and box size
+coeff <- c(1,2,5,10,15,25,50,75,100,150)
+box_size <- box_size0 * coeff # box_size in m
+CV <- R2 <- Cor <- vector()
+CV_f <- function(obs,pred) {
+	RMSE <- sqrt(mean((obs-pred)^2))
+	Mean <- mean(obs)
+	return(RMSE/Mean)
+}
+R2_f <- function(obs,pred) {
+	sum1 <- sum((obs-pred)^2)
+	sum2 <- sum((obs-mean(obs))^2)
+	return(1-sum1/sum2)
+}
+for (i in 1:length(box_size)) {
+	# Box size
+	b <- box_size[i]
+	# Number of boxes
+	ncol <- ceiling((xmax(e) - xmin(e)) / b)
+	nrow <- ceiling((ymax(e) - ymin(e)) / b)
+	nbox <- ncol * nrow
+	# Box identification
+	J <- floor((x - xmin(e)) / b)
+	I <- floor((ymax(e) - y) / b)
+	box <- I * ncol + J
+	# Sum deforested areas by box
+	obs_d <- val_iCAR %>% mutate(box=box) %>%
+		group_by(box) %>% summarise(sum_obs_d_ha=sum(obs_d_ha)) %>%
+		pull(sum_obs_d_ha)
+	pred_d <- val_iCAR %>% mutate(box=box) %>%
+		group_by(box) %>% summarise(sum_pred_d_ha=sum(pred_d_ha)) %>%
+		pull(sum_pred_d_ha)
+	#plot(obs_d,pred_d)
+	CV[i] <- CV_f(obs_d,pred_d)
+	R2[i] <- R2_f(obs_d,pred_d)
+	Cor[i] <- cor(obs_d,pred_d,method="pearson")
+}
+plot(coeff,CV,type="l",xlab="Box size (km)")
+plot(coeff,R2,type="l",xlab="Box size (km)")
+plot(coeff,Cor,type="l",xlab="Box size (km)")
+Cor_iCAR <- Cor
 
 # Raster of differences
 system(paste0("gdal_calc.py --overwrite -A output/fcc_2010_2014_obs.tif -B output/fcc_2014_iCAR.tif ",
@@ -600,24 +683,70 @@ val_nsre_df <- dfp$validation_npix(r_pred="output/fcc_2014_nsre.tif",
                                    output_file="output/npix_nsre.txt", 
                                    value_f=1,
                                    value_d=0,
-                                   square_size=333L)
+                                   square_size=33L)
+val_nsre_df <- read.table("output/npix_nsre.txt",header=TRUE,sep=",")
 
 # Tidy dataset
 val_nsre <- val_nsre_df %>%
-  dplyr::filter(!(obs_f== 0 & obs_d==0)) %>% # Remove squares with no forest
-  dplyr::mutate(obs_d_ha=npix2ha(obs_d),pred_d_ha=npix2ha(pred_d),
-                obs_f_ha=npix2ha(obs_f),pred_f_ha=npix2ha(pred_f))
-write.table(val_nsre,"output/val_nsre.txt",row.names=FALSE,sep=",")
+	dplyr::mutate(obs_f_ha=npix2ha(obs_f),pred_f_ha=npix2ha(pred_f),
+								obs_d_ha=npix2ha(obs_d),pred_d_ha=npix2ha(pred_d)) %>%
+	dplyr::mutate(box0=0:(nrow(val_nsre_df)-1)) %>%
+	dplyr::filter(!(obs_f==0 & obs_d==0)) # Remove squares with no forest
 
-# Plot
-pred_obs_nsre <- ggplot(val_nsre, aes(obs_d_ha,pred_d_ha)) +
-  geom_point(alpha=0.1) +
-  geom_smooth() + geom_abline(intercept=0, slope=1) + 
-  coord_equal(xlim=c(0,1000), ylim=c(0,1000))
-ggsave("output/plot_pred_obs_nsre.pdf", pred_obs_nsre)
+# Coordinates of the centers of the 10-km boxes
+e <- extent(raster("output/fcc_2014_nsre.tif"))
+box_size0 <- 30*33
+ncol <- ceiling((xmax(e)-xmin(e))/box_size0)
+nrow <- ceiling((ymax(e)-ymin(e))/box_size0)
+y_box <- floor(val_nsre$box0/ncol) # quotient
+x_box <- val_nsre$box0 %% ncol # remainder
+y <- ymax(e)-box_size0*(y_box+0.5)
+x <- xmin(e)+box_size0*(x_box+0.5)
+# Box number from x,y coordinates and box size
+coeff <- c(1,2,5,10,15,25,50,75,100,150)
+box_size <- box_size0 * coeff # box_size in m
+CV <- R2 <- Cor <- vector()
+CV_f <- function(obs,pred) {
+	RMSE <- sqrt(mean((obs-pred)^2))
+	Mean <- mean(obs)
+	return(RMSE/Mean)
+}
+R2_f <- function(obs,pred) {
+	sum1 <- sum((obs-pred)^2)
+	sum2 <- sum((obs-mean(obs))^2)
+	return(1-sum1/sum2)
+}
+for (i in 1:length(box_size)) {
+	# Box size
+	b <- box_size[i]
+	# Number of boxes
+	ncol <- ceiling((xmax(e) - xmin(e)) / b)
+	nrow <- ceiling((ymax(e) - ymin(e)) / b)
+	nbox <- ncol * nrow
+	# Box identification
+	J <- floor((x - xmin(e)) / b)
+	I <- floor((ymax(e) - y) / b)
+	box <- I * ncol + J
+	# Sum deforested areas by box
+	obs_d <- val_nsre %>% mutate(box=box) %>%
+		group_by(box) %>% summarise(sum_obs_d_ha=sum(obs_d_ha)) %>%
+		pull(sum_obs_d_ha)
+	pred_d <- val_nsre %>% mutate(box=box) %>%
+		group_by(box) %>% summarise(sum_pred_d_ha=sum(pred_d_ha)) %>%
+		pull(sum_pred_d_ha)
+	#plot(obs_d,pred_d)
+	CV[i] <- CV_f(obs_d,pred_d)
+	R2[i] <- R2_f(obs_d,pred_d)
+	Cor[i] <- cor(obs_d,pred_d)
+}
+plot(coeff,CV,type="l",xlab="Box size (km)")
+plot(coeff,R2,type="l",xlab="Box size (km)")
+plot(coeff,Cor,type="l",xlab="Box size (km)")
+Cor_nsre <- Cor
 
-# Model
-corr_nsre <- round(100*cor(x=val_nsre$pred_d_ha, y=val_nsre$obs_d_ha, method=c("pearson")))
+# Compare correlation
+plot(coeff,Cor_iCAR,type="l",xlab="Box size (km)",ylim=c(0,0.35))
+lines(coeff,Cor_nsre)
 
 # Backup correlation estimates
 corr_df <- data.frame(model=c("nsre","iCAR"),
