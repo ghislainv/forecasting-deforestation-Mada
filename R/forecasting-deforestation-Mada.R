@@ -7,11 +7,14 @@
 # license         :GPLv3
 # ==============================================================================
 
-# Anaconda2 must be installed
+# Miniconda3 must be installed
 # https://conda.io/docs/user-guide/install/index.html
 
 # Environmental variables
-Sys.setenv(RETICULATE_PYTHON="/usr/bin/python")
+# Sys.setenv(RETICULATE_PYTHON="/usr/bin/python")
+Sys.setenv(RETICULATE_PYTHON="/home/ghislain/miniconda3/bin/python")
+Sys.setenv(CPLUS_INCLUDE_PATH="/usr/include/gdal")
+Sys.setenv(C_INCLUDE_PATH="/usr/include/gdal")
 Sys.unsetenv("DISPLAY") # Remove DISPLAY for Python plot
 
 # Libraries
@@ -31,33 +34,31 @@ source("R/dfp_plot.R")
 # Setup Python virtual environment
 # ================================
 
-# # Force the use of miniconda2 python 2.7
+# Force the use of miniconda3 python 3
+# use_python("/home/ghislain/miniconda3/bin/python", required=TRUE) # no effect
+py_config()
 
-# use_python("/usr/bin/python", required=TRUE)
-# py_config()
+# Create conda virtual environment
+if (!("r-reticulate" %in% conda_list()$name)) {
+  conda_create("r-reticulate")
+	# Conda install with use of conda-forge
+	conda_modules <- c("pip","gdal","numpy","scipy","statsmodels")
+	conda_install("r-reticulate",conda_modules,forge=TRUE)
+}
 
-# # Create conda virtual environment
-# if (!("r-reticulate" %in% conda_list()$name)) {
-# 	# Python 2.7
-#   conda_create("r-reticulate","python=2.7")
-# 	# Conda install with use of conda-forge
-# 	conda_modules <- c("pip","gdal","numpy","scipy","statsmodels")
-# 	conda_install("r-reticulate",conda_modules,forge=TRUE)
-# }
-# 
-# # Install deforestprob from git with pip
-# git_deforestprob <- "https://github.com/ghislainv/deforestprob/archive/master.zip"
-# conda_install("r-reticulate",git_deforestprob,pip=TRUE,pip_ignore_installed=FALSE)
-# py_discover_config("deforestprob","r-reticulate")
+# Install forestatrisk from git with pip
+git_forestatrisk <- "https://github.com/ghislainv/forestatrisk/archive/master.zip"
+conda_install("r-reticulate",git_forestatrisk,pip=TRUE,pip_ignore_installed=FALSE)
+py_discover_config("forestatrisk","r-reticulate")
 
-# # Use conda env
-# use_condaenv("r-reticulate", required=TRUE)
+# Use conda env
+use_condaenv("r-reticulate", required=TRUE)
 
 # ================================
 # Import Python modules
 # ================================
 
-dfp <- import("deforestprob") # Disregard warnings
+far <- import("forestatrisk") # Disregard warnings
 patsy <- import("patsy")
 sm <- import("statsmodels.api")
 smf <- import("statsmodels.formula.api")
@@ -112,7 +113,7 @@ if (!dir.exists("output")) {
 
 # Sample points
 if (!file.exists("output/sample.txt")) {
-  dataset <- dfp$sample(nsamp=10000L, Seed=1234L, csize=10L,
+  dataset <- far$sample(nsamp=10000L, Seed=1234L, csize=10L,
                         var_dir="data/model",
                         input_forest_raster="fordefor2010.tif",
                         output_file="output/sample.txt",
@@ -133,7 +134,7 @@ dataset_nona <- dataset %>%
 	dplyr::filter(complete.cases(dataset))
 
 # Spatial cells for spatial-autocorrelation
-neighborhood <- dfp$cellneigh_ctry(raster="data/model/fordefor2010.tif",
+neighborhood <- far$cellneigh_ctry(raster="data/model/fordefor2010.tif",
 																	 vector="data/mada/mada38s.shp",
 																	 csize=10L, rank=1L)
 nneigh <- neighborhood[[1]]
@@ -155,7 +156,7 @@ formula <- paste0("I(1-fordefor2010) + trials ~ C(sapm) + scale(altitude) + scal
 									"scale(dist_road) + scale(dist_town) + cell")
 
 # Model
-mod_binomial_iCAR <- dfp$model_binomial_iCAR(
+mod_binomial_iCAR <- far$model_binomial_iCAR(
 	# Observations
 	suitability_formula=formula, data=r_to_py(dataset_nona),
 	# Spatial structure
@@ -193,13 +194,13 @@ rho <- rep(-9999,ncell)  # -9999 will be considered as nodata
 rho[cell_in+1] <- mod_binomial_iCAR$rho
 
 # Resample
-dfp$resample_rho(rho=r_to_py(rho), input_raster="data/model/fordefor2010.tif",
+far$resample_rho(rho=r_to_py(rho), input_raster="data/model/fordefor2010.tif",
 								 output_file="output/rho.tif",
 								 csize_orig=10L, csize_new=1L)
 
 # Plot random effects
-dfp$plot$rho("output/rho_orig.tif",output_file="output/rho_orig.png")
-dfp$plot$rho("output/rho.tif",output_file="output/rho.png")
+far$plot$rho("output/rho_orig.tif",output_file="output/rho_orig.png")
+far$plot$rho("output/rho.tif",output_file="output/rho.png")
 
 # Plot with R
 mada <- rgdal::readOGR(dsn="data/mada",layer="mada38s")
@@ -215,26 +216,26 @@ rho_plot(r.rho, mada, output_file="output/rho_ggplot.png",
 # ========================================================
 
 # Compute predictions
-fig_pred <- dfp$predict_raster_binomial_iCAR(mod_binomial_iCAR, var_dir="data/model",
+fig_pred <- far$predict_raster_binomial_iCAR(mod_binomial_iCAR, var_dir="data/model",
 											  input_cell_raster="output/rho.tif",
 											  input_forest_raster="data/model/fordefor2010.tif",
 											  output_file="output/pred_binomial_iCAR.tif",
 											  blk_rows=128L)
 
 # Plot predictions
-dfp$plot$prob("output/pred_binomial_iCAR.tif",output_file="output/pred_binomial_iCAR.png")
+far$plot$prob("output/pred_binomial_iCAR.tif",output_file="output/pred_binomial_iCAR.png")
 
 # ========================================================
 # Predicting forest cover
 # ========================================================
 
-forest_cover <- dfp$deforest(input_raster="output/pred_binomial_iCAR.tif",
+forest_cover <- far$deforest(input_raster="output/pred_binomial_iCAR.tif",
 														 hectares=4000000,
 														 output_file="output/forest_cover_2050.tif",
 														 blk_rows=128L)
 
 # Plot future forest cover
-dfp$plot$fcc("output/forest_cover_2050.tif",output_file="output/forest_cover_2050.png")
+far$plot$fcc("output/forest_cover_2050.tif",output_file="output/forest_cover_2050.png")
 
 # ========================================================
 # Model comparison
@@ -285,7 +286,7 @@ proba_defor_pred == proba_defor
 # Computing accuracy indices
 pred <- dataset_nona$pred
 obs <- 1-dataset_nona$fordefor2010
-internal_validation_iCAR <- as.data.frame(dfp$accuracy_indices(pred,obs))
+internal_validation_iCAR <- as.data.frame(far$accuracy_indices(pred,obs))
 
 # 2. nsre
 dataset_nona$pred <- 0
@@ -304,13 +305,13 @@ proba_defor_pred == proba_defor
 # Computing accuracy indices
 pred <- dataset_nona$pred
 obs <- 1-dataset_nona$fordefor2010
-internal_validation_nsre <- as.data.frame(dfp$accuracy_indices(pred,obs))
+internal_validation_nsre <- as.data.frame(far$accuracy_indices(pred,obs))
 
 # 3. With random predictions
 internal_validation_rand <- matrix(data=NA,ncol=6,nrow=100)
 for (i in 1:100) {
   pred <- sample(x=c(0,1),size=nobs,replace=TRUE,prob=c(1-proba_defor,proba_defor))
-  internal_validation_rand[i,] <- as.numeric(dfp$accuracy_indices(pred,obs))
+  internal_validation_rand[i,] <- as.numeric(far$accuracy_indices(pred,obs))
 }
 mean_rand <- apply(internal_validation_rand,2,mean)
 sd_rand <- apply(internal_validation_rand,2,sd)
@@ -346,25 +347,25 @@ write.table(mod,file="output/deviance_model_comparison.txt",sep=",",row.names=FA
 # =================
 
 # Compute predictions with logistic regression
-fig_pred_nsre <- dfp$predict_raster(mod_nsre, var_dir="data/model",
+fig_pred_nsre <- far$predict_raster(mod_nsre, var_dir="data/model",
 																		input_forest_raster="data/model/fordefor2010.tif",
 																		output_file="output/pred_nsre.tif",
 																		blk_rows=128L, transform=TRUE)
 
 # Plot predictions
-dfp$plot$prob("output/pred_nsre.tif",output_file="output/pred_nsre.png")
+far$plot$prob("output/pred_nsre.tif",output_file="output/pred_nsre.png")
 
 # Future forest cover
-forest_cover_nsre <- dfp$deforest(input_raster="output/pred_nsre.tif",
+forest_cover_nsre <- far$deforest(input_raster="output/pred_nsre.tif",
                                   hectares=4000000,
                                   output_file="output/forest_cover_2050_nsre.tif",
                                   blk_rows=128L)
 
 # Plot future forest cover
-dfp$plot$fcc("output/forest_cover_2050_nsre.tif",output_file="output/forest_cover_2050_nsre.png")
+far$plot$fcc("output/forest_cover_2050_nsre.tif",output_file="output/forest_cover_2050_nsre.png")
 
 # Correlation between maps at ~10km
-corr_10km_df <- dfp$validation_npix(r_pred="output/forest_cover_2050.tif",
+corr_10km_df <- far$validation_npix(r_pred="output/forest_cover_2050.tif",
                                     r_obs="output/forest_cover_2050_nsre.tif",
                                     output_file="output/npix.txt", 
                                     value_f=1,
@@ -524,23 +525,23 @@ system(paste0("gdal_calc.py --overwrite -A output/fordefor2010_.tif -B output/fo
               "--NoDataValue=255"))
 
 # Plot observations
-dfp$plot$fcc("output/fcc_2010_2014_obs.tif",output_file="output/fcc_2010_2014_obs.png")
+far$plot$fcc("output/fcc_2010_2014_obs.tif",output_file="output/fcc_2010_2014_obs.png")
 
 # Number of deforested pixels
-count_d <- dfp$countpix("output/fcc_2010_2014_obs.tif", value=0L, blk_rows=128L)
+count_d <- far$countpix("output/fcc_2010_2014_obs.tif", value=0L, blk_rows=128L)
 count_d$area # 392601 ha
 
 # ==============
 # Comp with iCAR
 
 # Predictions iCAR 2010-2014
-fcc_iCAR_2014 <- dfp$deforest(input_raster="output/pred_binomial_iCAR.tif",
+fcc_iCAR_2014 <- far$deforest(input_raster="output/pred_binomial_iCAR.tif",
                               hectares=count_d$area,
                               output_file="output/fcc_2014_iCAR.tif",
                               blk_rows=128L)
 
 # Correlation between maps at ~10km2
-val_iCAR_df <- dfp$validation_npix(r_pred="output/fcc_2014_iCAR.tif",
+val_iCAR_df <- far$validation_npix(r_pred="output/fcc_2014_iCAR.tif",
                                    r_obs="output/fcc_2010_2014_obs.tif",
                                    output_file="output/npix_iCAR.txt", 
                                    value_f=1,
@@ -672,13 +673,13 @@ ggsave("output/diff_zoom2_iCAR.png", zoom2_iCAR)
 # Comp with nsre
 
 # Predictions nsre 2010-2014
-fcc_nsre_2014 <- dfp$deforest(input_raster="output/pred_nsre.tif",
+fcc_nsre_2014 <- far$deforest(input_raster="output/pred_nsre.tif",
                               hectares=count_d$area,
                               output_file="output/fcc_2014_nsre.tif",
                               blk_rows=128L)
 
 # Correlation between maps at ~10km2
-val_nsre_df <- dfp$validation_npix(r_pred="output/fcc_2014_nsre.tif",
+val_nsre_df <- far$validation_npix(r_pred="output/fcc_2014_nsre.tif",
                                    r_obs="output/fcc_2010_2014_obs.tif",
                                    output_file="output/npix_nsre.txt", 
                                    value_f=1,
