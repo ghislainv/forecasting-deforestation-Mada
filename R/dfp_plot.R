@@ -2,6 +2,7 @@ require(broom)
 require(glue)
 require(rasterVis)
 require(scales)
+require(grid)
 
 # Theme
 ## Setting basic theme options for plot with ggplot2

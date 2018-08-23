@@ -4,7 +4,7 @@ output
 *.log
 
 # Python virtual env
-r-reticulate
+far_venv
 
 # Rproj
 *.Rproj

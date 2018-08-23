@@ -7,16 +7,6 @@
 # license         :GPLv3
 # ==============================================================================
 
-# Miniconda3 must be installed
-# https://conda.io/docs/user-guide/install/index.html
-
-# Environmental variables
-# Sys.setenv(RETICULATE_PYTHON="/usr/bin/python")
-Sys.setenv(RETICULATE_PYTHON="/home/ghislain/miniconda3/bin/python")
-Sys.setenv(CPLUS_INCLUDE_PATH="/usr/include/gdal")
-Sys.setenv(C_INCLUDE_PATH="/usr/include/gdal")
-Sys.unsetenv("DISPLAY") # Remove DISPLAY for Python plot
-
 # Libraries
 require(reticulate)
 require(glue)
@@ -25,7 +15,7 @@ require(dplyr)
 require(broom)
 require(ggplot2)
 require(rasterVis)
-#require(rgdal)
+require(rgdal)
 
 # Source R plotting functions
 source("R/dfp_plot.R")
@@ -34,31 +24,24 @@ source("R/dfp_plot.R")
 # Setup Python virtual environment
 # ================================
 
-# Force the use of miniconda3 python 3
-# use_python("/home/ghislain/miniconda3/bin/python", required=TRUE) # no effect
-py_config()
-
 # Create conda virtual environment
-if (!("r-reticulate" %in% conda_list()$name)) {
-  conda_create("r-reticulate")
-	# Conda install with use of conda-forge
-	conda_modules <- c("pip","gdal","numpy","scipy","statsmodels")
-	conda_install("r-reticulate",conda_modules,forge=TRUE)
+if (!dir.exists("far_venv")) {
+	# Local virtualenv
+	Sys.setenv(WORKON_HOME=getwd())
+	# Create virtualenv
+	virtualenv_create("far_venv")
+	# Install forestatrisk package
+	git_forestatrisk <- "https://github.com/ghislainv/forestatrisk/archive/master.zip"
+	virtualenv_install("far_venv",git_forestatrisk,ignore_installed=TRUE)
+	# Activate this virtualenv
+	use_virtualenv("far_venv", required=TRUE)
 }
-
-# Install forestatrisk from git with pip
-git_forestatrisk <- "https://github.com/ghislainv/forestatrisk/archive/master.zip"
-conda_install("r-reticulate",git_forestatrisk,pip=TRUE,pip_ignore_installed=FALSE)
-py_discover_config("forestatrisk","r-reticulate")
-
-# Use conda env
-use_condaenv("r-reticulate", required=TRUE)
 
 # ================================
 # Import Python modules
 # ================================
 
-far <- import("forestatrisk") # Disregard warnings
+far <- import("forestatrisk")
 patsy <- import("patsy")
 sm <- import("statsmodels.api")
 smf <- import("statsmodels.formula.api")
