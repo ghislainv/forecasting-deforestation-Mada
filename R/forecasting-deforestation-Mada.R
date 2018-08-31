@@ -7,8 +7,12 @@
 # license         :GPLv3
 # ==============================================================================
 
+# Environmental variables
+Sys.unsetenv("DISPLAY") # Remove DISPLAY for Python plot
+
 # Libraries
 require(reticulate)
+#use_python("/usr/bin/python")
 require(glue)
 require(curl)
 require(dplyr)
@@ -33,9 +37,13 @@ if (!dir.exists("far_venv")) {
 	# Install forestatrisk package
 	git_forestatrisk <- "https://github.com/ghislainv/forestatrisk/archive/master.zip"
 	virtualenv_install("far_venv",git_forestatrisk,ignore_installed=TRUE)
-	# Activate this virtualenv
-	use_virtualenv("far_venv", required=TRUE)
+	virtualenv_install("far_venv","statsmodels")
 }
+# Activate this virtualenv
+# use_virtualenv("far_venv_py2", required=TRUE) # Python 2
+use_virtualenv("far_venv", required=TRUE) # Python 3
+# Check python version and virtualenv
+py_config()
 
 # ================================
 # Import Python modules
@@ -94,27 +102,27 @@ if (!dir.exists("output")) {
   dir.create("output")
 }
 
-# Sample points
+# Training data-set
 if (!file.exists("output/sample.txt")) {
-  dataset <- far$sample(nsamp=10000L, Seed=1234L, csize=10L,
-                        var_dir="data/model",
-                        input_forest_raster="fordefor2010.tif",
-                        output_file="output/sample.txt",
-                        blk_rows=1L)
+  samp <- far$sample(nsamp=10000L, Seed=1234L, csize=10L,
+                       var_dir="data/model",
+                       input_forest_raster="fordefor2010.tif",
+                       output_file="output/sample.txt",
+                       blk_rows=1L)
 }
-dataset <- read.table("output/sample.txt", header=TRUE, sep=",")
-head(dataset)
+samp <- read.table("output/sample.txt", header=TRUE, sep=",")
+set.seed(1234)
+train <- sample(1:20000, size=10000, replace=FALSE)
+data_train <- samp[train,] %>% dplyr::filter(complete.cases(.))
+data_valid <- samp[-train,] %>% dplyr::filter(complete.cases(.))
+head(data_train)
 
 # ========================================================
 # hSDM model
 # ========================================================
 
 # Set number of trials to one
-dataset$trials <- 1
-
-# Remove observations with NA
-dataset_nona <- dataset %>%
-	dplyr::filter(complete.cases(dataset))
+data_train$trials <- 1
 
 # Spatial cells for spatial-autocorrelation
 neighborhood <- far$cellneigh_ctry(raster="data/model/fordefor2010.tif",
@@ -127,10 +135,10 @@ ncell <- neighborhood[[4]]
 
 # Udpate cell number in dataset
 cell_rank <- vector()
-for (i in 1:nrow(dataset_nona)) {
-	cell_rank[i] <- which(cell_in==dataset_nona$cell[i])-1 # ! cells start at zero
+for (i in 1:nrow(data_train)) {
+	cell_rank[i] <- which(cell_in==data_train$cell[i])-1 # ! cells start at zero
 }
-dataset_nona$cell <- cell_rank
+data_train$cell <- cell_rank
 
 # Formula
 formula <- paste0("I(1-fordefor2010) + trials ~ C(sapm) + scale(altitude) + scale(slope) +",
@@ -141,7 +149,7 @@ formula <- paste0("I(1-fordefor2010) + trials ~ C(sapm) + scale(altitude) + scal
 # Model
 mod_binomial_iCAR <- far$model_binomial_iCAR(
 	# Observations
-	suitability_formula=formula, data=r_to_py(dataset_nona),
+	suitability_formula=formula, data=r_to_py(data_train),
 	# Spatial structure
 	n_neighbors=np_array(nneigh,dtype="int32"), neighbors=np_array(adj,dtype="int32"),
 	# Environment
@@ -199,11 +207,11 @@ rho_plot(r.rho, mada, output_file="output/rho_ggplot.png",
 # ========================================================
 
 # Compute predictions
-fig_pred <- far$predict_raster_binomial_iCAR(mod_binomial_iCAR, var_dir="data/model",
-											  input_cell_raster="output/rho.tif",
-											  input_forest_raster="data/model/fordefor2010.tif",
-											  output_file="output/pred_binomial_iCAR.tif",
-											  blk_rows=128L)
+far$predict_raster_binomial_iCAR(mod_binomial_iCAR, var_dir="data/model",
+																 input_cell_raster="output/rho.tif",
+											           input_forest_raster="data/model/fordefor2010.tif",
+											           output_file="output/pred_binomial_iCAR.tif",
+											           blk_rows=128L)
 
 # Plot predictions
 far$plot$prob("output/pred_binomial_iCAR.tif",output_file="output/pred_binomial_iCAR.png")
@@ -212,13 +220,42 @@ far$plot$prob("output/pred_binomial_iCAR.tif",output_file="output/pred_binomial_
 # Predicting forest cover
 # ========================================================
 
-forest_cover <- far$deforest(input_raster="output/pred_binomial_iCAR.tif",
-														 hectares=4000000,
-														 output_file="output/forest_cover_2050.tif",
-														 blk_rows=128L)
+deforest <- far$deforest(input_raster="output/pred_binomial_iCAR.tif",
+												 hectares=4000000,
+												 output_file="output/forest_cover_2050.tif",
+												 blk_rows=128L)
 
 # Plot future forest cover
 far$plot$fcc("output/forest_cover_2050.tif",output_file="output/forest_cover_2050.png")
+
+# ========================================================
+# Model performance using validation data-set
+# ========================================================
+
+# Udpate cell number in dataset
+cell_rank <- vector()
+for (i in 1:nrow(data_valid)) {
+	cell_rank[i] <- which(cell_in==data_valid$cell[i])-1 # ! cells start at zero
+}
+data_valid$cell <- cell_rank
+
+data_valid$pred <- 0
+data_valid$theta_pred <- mod_binomial_iCAR$predict(new_data=data_valid)
+# Proportion of deforested pixels
+nobs <- length(data_valid$fordefor2010)  # inferior to 20000 as there were NaN
+ndefor <- sum(data_valid$fordefor2010==0)  # 0 for deforestation in fordefor2010
+proba_defor <- ndefor/nobs  # not exactly 0.5
+# Probability threshold to transform probability into binary values
+proba_thresh <- quantile(data_valid$theta_pred, 1-proba_defor)  # ! must be (1-proba_defor)
+data_valid$pred[data_valid$theta_pred >= proba_thresh] <- 1
+# We check that the proportion of deforested pixel is the same for observations/predictions
+ndefor_pred <- sum(data_valid$pred == 1)
+proba_defor_pred <- ndefor_pred/nobs
+proba_defor_pred == proba_defor
+# Computing accuracy indices
+pred <- data_valid$pred
+obs <- 1-data_valid$fordefor2010
+performance_iCAR <- as.data.frame(far$accuracy_indices(pred,obs))
 
 # ========================================================
 # Model comparison
@@ -229,7 +266,7 @@ deviance_full <- 0
 
 # Null model
 formula_null <- "I(1-fordefor2010) ~ 1"
-dmat_null <- patsy$dmatrices(formula_null, data=r_to_py(dataset_nona), NA_action="drop",
+dmat_null <- patsy$dmatrices(formula_null, data=r_to_py(data_train), NA_action="drop",
 											 return_type="dataframe", eval_env=-1L)
 Y <- dmat_null[[1]]
 X_null <- dmat_null[[2]]
@@ -240,7 +277,7 @@ deviance_null <- mod_null$deviance
 formula_nsre <- paste0("I(1-fordefor2010) ~ C(sapm) + scale(altitude) + ",
 											"scale(slope) + scale(dist_defor) + I(scale(dist_defor)*scale(dist_defor)) + ",
 											"scale(dist_edge) + scale(dist_road) + scale(dist_town)")
-mod_nsre <- smf$glm(formula_nsre, r_to_py(dataset_nona), family=sm$families$Binomial(), eval_env=-1L)$fit()
+mod_nsre <- smf$glm(formula_nsre, r_to_py(data_train), family=sm$families$Binomial(), eval_env=-1L)$fit()
 deviance_nsre <- mod_nsre$deviance
 
 # Summary nsre
@@ -248,46 +285,45 @@ sink(file="output/summary_mod_binomial_nsre.txt")
 print(mod_nsre$summary())
 sink()
 
-
 # ================
 # Accuracy indices
 
 # 1. iCAR model
-dataset_nona$pred <- 0
-dataset_nona$theta_pred <- mod_binomial_iCAR$theta_pred
+data_train$pred <- 0
+data_train$theta_pred <- mod_binomial_iCAR$theta_pred
 # Proportion of deforested pixels
-nobs <- length(dataset_nona$fordefor2010)  # inferior to 20000 as there were NaN
-ndefor <- sum(dataset_nona$fordefor2010==0)  # 0 for deforestation in fordefor2010
+nobs <- length(data_train$fordefor2010)  # inferior to 20000 as there were NaN
+ndefor <- sum(data_train$fordefor2010==0)  # 0 for deforestation in fordefor2010
 proba_defor <- ndefor/nobs  # not exactly 0.5
 # Probability threshold to transform probability into binary values
-proba_thresh <- quantile(dataset_nona$theta_pred, 1-proba_defor)  # ! must be (1-proba_defor)
-dataset_nona$pred[dataset_nona$theta_pred >= proba_thresh] <- 1
+proba_thresh <- quantile(data_train$theta_pred, 1-proba_defor)  # ! must be (1-proba_defor)
+data_train$pred[data_train$theta_pred >= proba_thresh] <- 1
 # We check that the proportion of deforested pixel is the same for observations/predictions
-ndefor_pred <- sum(dataset_nona$pred == 1)
+ndefor_pred <- sum(data_train$pred == 1)
 proba_defor_pred <- ndefor_pred/nobs
 proba_defor_pred == proba_defor
 # Computing accuracy indices
-pred <- dataset_nona$pred
-obs <- 1-dataset_nona$fordefor2010
+pred <- data_train$pred
+obs <- 1-data_train$fordefor2010
 internal_validation_iCAR <- as.data.frame(far$accuracy_indices(pred,obs))
 
 # 2. nsre
-dataset_nona$pred <- 0
-dataset_nona$theta_pred <- mod_nsre$fittedvalues
+data_train$pred <- 0
+data_train$theta_pred <- mod_nsre$fittedvalues
 # Proportion of deforested pixels
-nobs <- length(dataset_nona$fordefor2010)  # inferior to 20000 as there were NaN
-ndefor <- sum(dataset_nona$fordefor2010==0)  # 0 for deforestation in fordefor2010
+nobs <- length(data_train$fordefor2010)  # inferior to 20000 as there were NaN
+ndefor <- sum(data_train$fordefor2010==0)  # 0 for deforestation in fordefor2010
 proba_defor <- ndefor/nobs  # not exactly 0.5
 # Probability threshold to transform probability into binary values
-proba_thresh <- quantile(dataset_nona$theta_pred, 1-proba_defor)  # ! must be (1-proba_defor)
-dataset_nona$pred[dataset_nona$theta_pred >= proba_thresh] <- 1
+proba_thresh <- quantile(data_train$theta_pred, 1-proba_defor)  # ! must be (1-proba_defor)
+data_train$pred[data_train$theta_pred >= proba_thresh] <- 1
 # We check that the proportion of deforested pixel is the same for observations/predictions
-ndefor_pred <- sum(dataset_nona$pred == 1)
+ndefor_pred <- sum(data_train$pred == 1)
 proba_defor_pred <- ndefor_pred/nobs
 proba_defor_pred == proba_defor
 # Computing accuracy indices
-pred <- dataset_nona$pred
-obs <- 1-dataset_nona$fordefor2010
+pred <- data_train$pred
+obs <- 1-data_train$fordefor2010
 internal_validation_nsre <- as.data.frame(far$accuracy_indices(pred,obs))
 
 # 3. With random predictions
@@ -347,151 +383,28 @@ forest_cover_nsre <- far$deforest(input_raster="output/pred_nsre.tif",
 # Plot future forest cover
 far$plot$fcc("output/forest_cover_2050_nsre.tif",output_file="output/forest_cover_2050_nsre.png")
 
-# Correlation between maps at ~10km
-corr_10km_df <- far$validation_npix(r_pred="output/forest_cover_2050.tif",
-                                    r_obs="output/forest_cover_2050_nsre.tif",
-                                    output_file="output/npix.txt", 
-                                    value_f=1,
-                                    value_d=0,
-                                    square_size=33L)
-
-# Function to convert pixels to hectares
-npix2ha <- function(npix,res=30) {return(npix*res*res/10000)}
-
-# Tidy dataset
-corr_10km <- corr_10km_df %>%
-  dplyr::mutate(obs_f_ha=npix2ha(obs_f),pred_f_ha=npix2ha(pred_f),
-  							obs_d_ha=npix2ha(obs_d),pred_d_ha=npix2ha(pred_d)) %>%
-	dplyr::mutate(box0=0:(nrow(corr_10km_df)-1)) %>%
-	dplyr::filter(!(obs_f== 0 & obs_d==0)) # Remove squares with no forest
-
-# Coordinates of the centers of the 10-km boxes
-e <- extent(raster("output/forest_cover_2050.tif"))
-box_size0 <- 30*33
-ncol <- ceiling((xmax(e)-xmin(e))/box_size0)
-nrow <- ceiling((ymax(e)-ymin(e))/box_size0)
-y_box <- floor(corr_10km$box0/ncol) # quotient
-x_box <- corr_10km$box0 %% ncol # remainder
-y <- ymax(e)-box_size0*(y_box+0.5)
-x <- xmin(e)+box_size0*(x_box+0.5)
-# Box number from x,y coordinates and box size
-coeff <- c(1,2,5,10,15,25,50,75,100,150)
-box_size <- box_size0 * coeff # box_size in m
-CV <- R2 <- Cor <- vector()
-CV_f <- function(obs,pred) {
-	RMSE <- sqrt(mean((obs-pred)^2))
-	Mean <- mean(obs)
-	return(RMSE/Mean)
-}
-R2_f <- function(obs,pred) {
-	sum1 <- sum((obs-pred)^2)
-	sum2 <- sum((obs-mean(obs))^2)
-	return(1-sum1/sum2)
-}
-for (i in 1:length(box_size)) {
-	# Box size
-	b <- box_size[i]
-	# Number of boxes
-	ncol <- ceiling((xmax(e)-xmin(e))/b)
-	nrow <- ceiling((ymax(e)-ymin(e))/b)
-	nbox <- ncol * nrow
-	# Box identification
-  J <- floor((x - xmin(e)) / b)
-  I <- floor((ymax(e) - y) / b)
-  box <- I * ncol + J
-  # Sum deforested areas by box
-  obs_d <- corr_10km %>% mutate(box=box) %>%
-  	group_by(box) %>% summarise(sum_obs_d_ha=sum(obs_d_ha)) %>%
-  	pull(sum_obs_d_ha)
-  pred_d <- corr_10km %>% mutate(box=box) %>%
-  	group_by(box) %>% summarise(sum_pred_d_ha=sum(pred_d_ha)) %>%
-  	pull(sum_pred_d_ha)
-  CV[i] <- CV_f(obs_d,pred_d)
-  R2[i] <- R2_f(obs_d,pred_d)
-  Cor[i] <- cor(obs_d,pred_d)
-}
-plot(coeff,CV,type="l",xlab="Box size (km)")
-plot(coeff,R2,type="l",xlab="Box size (km)")
-plot(coeff,Cor,type="l",xlab="Box size (km)")
-
-# Check same number of forest and deforestation
-f_tot_obs <- sum(corr_10km$obs_d_ha + corr_10km$obs_f_ha)
-f_tot_pred <- sum(corr_10km$pred_d_ha + corr_10km$pred_f_ha)
-d_tot_obs <- sum(corr_10km$obs_d_ha)
-d_tot_pred <- sum(corr_10km$pred_d_ha)
-
-# Plot
-plot_pred_obs <- ggplot(corr_10km, aes(obs_d_ha,pred_d_ha)) +
-  geom_point() +
-  geom_smooth()
-ggsave("output/plot_pred_obs.pdf", plot_pred_obs)
-
-# Model
-correlation <- round(100*cor(x=corr_10km$pred_d_ha, y=corr_10km$obs_d_ha, method=c("pearson")))
-# Correlation is weak between the two maps at 10km: 62% (52% at 1km)
-
 # Raster of differences
-system(paste0("gdal_calc.py --overwrite -A output/forest_cover_2050.tif -B output/forest_cover_2050_nsre.tif ",
-              "--outfile=output/diff_iCAR_nsre_2050.tif --type=Byte ",
-              "--calc='255-254*(A==1)*(B==1)-255*(A==0)*(B==0)-253*(A==1)*(B==0)-253*(A==0)*(B==1)' ",
-              "--co 'COMPRESS=LZW' --co 'PREDICTOR=2' ",
-              "--NoDataValue=255"))
-
+far$differences(inputA = "output/forest_cover_2050.tif",inputB = "output/forest_cover_2050_nsre.tif",
+								output_file = "output/diff_iCAR_nsre_2050.tif", blk_rows = 1L)
 # Plot the raster of differences
+far$plot$differences("output/diff_iCAR_nsre_2050.tif",
+										 borders = "data/mada/mada38s.shp",
+										 output_file = "output/diff_iCAR_nsre_2050.png")
 
-# Data
+# With ggplot2
 r_diff <- raster("output/diff_iCAR_nsre_2050.tif")
-
-system(paste0("gdalwarp -overwrite -dstnodata 255 \\
-          -r near -tr 30 30 \\
-          -te ",Extent.zoom1," -of GTiff \\
-          -co 'compress=lzw' -co 'predictor=2' \\
-          output/diff_iCAR_nsre_2050.tif \\
-          output/diff_zoom1.tif"))
-system(paste0("gdalwarp -overwrite -dstnodata 255 \\
-          -r near -tr 30 30 \\
-          -te ",Extent.zoom2," -of GTiff \\
-          -co 'compress=lzw' -co 'predictor=2' \\
-          output/diff_iCAR_nsre_2050.tif \\
-          output/diff_zoom2.tif"))
-
-r_zoom1 <- raster("output/diff_zoom1.tif")
-r_zoom2 <- raster("output/diff_zoom2.tif")
-
-# Plot
-p_diff <- gplot(r_diff,maxpixels=10e5) +
-  geom_polygon(data=mada.df, aes(x=long, y=lat, group=id), colour="black", fill="white", size=0.3) +
-  geom_raster(aes(fill=factor(value))) +
-  scale_fill_manual(values=c("red","forestgreen","blue"), na.value="transparent") +
-  geom_rect(aes(xmin=346000,xmax=439000,ymin=7387000,ymax=7480000),
-            fill="transparent",colour="black",size=0.3) +
-  geom_rect(aes(xmin=793000,xmax=886000,ymin=7815000,ymax=7908000),
-            fill="transparent",colour="black",size=0.3) +
-  theme_bw() + theme_base +
-  coord_equal(xlim=c(300000,1100000),ylim=c(7165000,8685000))
-ggsave("output/diff_iCAR_nsre_2050.png", p_diff, width=4.5, height=8)
-
-# Zoom 1
-zoom1 <- gplot(r_zoom1,maxpixels=10e5) +
-  geom_polygon(data=mada.df, aes(x=long, y=lat, group=id), colour="black", fill="white", size=0.3) +
-  geom_raster(aes(fill=factor(value))) +
-  scale_fill_manual(values=c("red","forestgreen","blue"), na.value="transparent") +
-  geom_rect(aes(xmin=346000,xmax=439000,ymin=7387000,ymax=7480000),
-            fill="transparent",colour="black",size=0.3) +
-  theme_bw() + theme_base +
-  coord_equal(xlim=c(346000,439000), ylim=c(7387000,7480000))
-ggsave("output/diff_zoom1.png", zoom1)
-
-# Zoom 2
-zoom2 <- gplot(r_zoom2,maxpixels=10e5) +
-  geom_polygon(data=mada.df, aes(x=long, y=lat, group=id), colour="black", fill="white", size=0.3) +
-  geom_raster(aes(fill=factor(value))) +
-  scale_fill_manual(values=c("red","forestgreen","blue"), na.value="transparent") +
-  geom_rect(aes(xmin=793000,xmax=886000,ymin=7815000,ymax=7908000),
-            fill="transparent",colour="black",size=0.3) +
-  theme_bw() + theme_base +
-  coord_equal(xlim=c(793000,886000), ylim=c(7815000,7908000))
-ggsave("output/diff_zoom2.png", zoom2)
+mada <- rgdal::readOGR(dsn="data/mada",layer="mada38s")
+rect_df <- data.frame(xmin=c(346000,793000), xmax=c(439000,886000),
+											ymin=c(7387000,7815000), ymax=c(7480000,7908000),
+											id=c(1,2))
+diff_plot(input_raster = r_diff, input_vector = mada, maxpixels=10e5,
+					rect = rect_df, output_file = "output/diff_iCAR_nsre_2050_ggplot.png")
+diff_plot(input_raster = r_diff, input_vector = mada, maxpixels=10e5,
+					ext = extent(346000, 439000, 7387000, 7480000),
+					rect = rect_df[1,], output_file = "output/diff_iCAR_nsre_2050_ggplot_zoom1.png")
+diff_plot(input_raster = r_diff, input_vector = mada, maxpixels=10e5,
+					ext = extent(793000, 886000, 7815000, 7908000),
+					rect = rect_df[2,], output_file = "output/diff_iCAR_nsre_2050_ggplot_zoom2.png")
 
 # ====================================================
 # Predictions vs. observations on the period 2010-2014
@@ -588,69 +501,6 @@ plot(coeff,CV,type="l",xlab="Box size (km)")
 plot(coeff,R2,type="l",xlab="Box size (km)")
 plot(coeff,Cor,type="l",xlab="Box size (km)")
 Cor_iCAR <- Cor
-
-# Raster of differences
-system(paste0("gdal_calc.py --overwrite -A output/fcc_2010_2014_obs.tif -B output/fcc_2014_iCAR.tif ",
-              "--outfile=output/diff_obs_iCAR_2014.tif --type=Byte ",
-              "--calc='255-254*(A==1)*(B==1)-255*(A==0)*(B==0)-253*(A==1)*(B==0)-253*(A==0)*(B==1)' ",
-              "--co 'COMPRESS=LZW' --co 'PREDICTOR=2' ",
-              "--NoDataValue=255"))
-
-system(paste0("gdalwarp -overwrite -dstnodata 255 \\
-          -r near -tr 30 30 \\
-          -te ",Extent.zoom1," -of GTiff \\
-          -co 'compress=lzw' -co 'predictor=2' \\
-          output/diff_obs_iCAR_2014.tif \\
-          output/diff_zoom1_iCAR.tif"))
-system(paste0("gdalwarp -overwrite -dstnodata 255 \\
-          -r near -tr 30 30 \\
-          -te ",Extent.zoom2," -of GTiff \\
-          -co 'compress=lzw' -co 'predictor=2' \\
-          output/diff_obs_iCAR_2014.tif \\
-          output/diff_zoom2_iCAR.tif"))
-
-r_zoom1_iCAR <- raster("output/diff_zoom1_iCAR.tif")
-r_zoom2_iCAR <- raster("output/diff_zoom2_iCAR.tif")
-
-# Plot the raster of differences
-
-# Data
-r_diff_iCAR_2014 <- raster("output/diff_obs_iCAR_2014.tif")
-
-# Plot
-p_diff_iCAR_2014 <- gplot(r_diff_iCAR_2014,maxpixels=10e5) +
-  geom_polygon(data=mada.df, aes(x=long, y=lat, group=id), colour="black", fill="white", size=0.3) +
-  geom_raster(aes(fill=factor(value))) +
-  scale_fill_manual(values=c("red","forestgreen","blue"), na.value="transparent") +
-  geom_rect(aes(xmin=346000,xmax=439000,ymin=7387000,ymax=7480000),
-            fill="transparent",colour="black",size=0.3) +
-  geom_rect(aes(xmin=793000,xmax=886000,ymin=7815000,ymax=7908000),
-            fill="transparent",colour="black",size=0.3) +
-  theme_bw() + theme_base +
-  coord_equal(xlim=c(300000,1100000),ylim=c(7165000,8685000))
-ggsave("output/diff_obs_iCAR_2014.png", p_diff_iCAR_2014, width=4.5, height=8)
-
-# Zoom 1
-zoom1_iCAR <- gplot(r_zoom1_iCAR,maxpixels=10e5) +
-  geom_polygon(data=mada.df, aes(x=long, y=lat, group=id), colour="black", fill="white", size=0.3) +
-  geom_raster(aes(fill=factor(value))) +
-  scale_fill_manual(values=c("red","forestgreen","blue"), na.value="transparent") +
-  geom_rect(aes(xmin=346000,xmax=439000,ymin=7387000,ymax=7480000),
-            fill="transparent",colour="black",size=0.3) +
-  theme_bw() + theme_base +
-  coord_equal(xlim=c(346000,439000), ylim=c(7387000,7480000))
-ggsave("output/diff_zoom1_iCAR.png", zoom1_iCAR)
-
-# Zoom 2
-zoom2_iCAR <- gplot(r_zoom2_iCAR,maxpixels=10e5) +
-  geom_polygon(data=mada.df, aes(x=long, y=lat, group=id), colour="black", fill="white", size=0.3) +
-  geom_raster(aes(fill=factor(value))) +
-  scale_fill_manual(values=c("red","forestgreen","blue"), na.value="transparent") +
-  geom_rect(aes(xmin=793000,xmax=886000,ymin=7815000,ymax=7908000),
-            fill="transparent",colour="black",size=0.3) +
-  theme_bw() + theme_base +
-  coord_equal(xlim=c(793000,886000), ylim=c(7815000,7908000))
-ggsave("output/diff_zoom2_iCAR.png", zoom2_iCAR)
 
 # ==============
 # Comp with nsre
