@@ -238,24 +238,32 @@ for (i in 1:nrow(data_valid)) {
 	cell_rank[i] <- which(cell_in==data_valid$cell[i])-1 # ! cells start at zero
 }
 data_valid$cell <- cell_rank
-
-data_valid$pred <- 0
+# Model predictions for validation dataset
 data_valid$theta_pred <- mod_binomial_iCAR$predict(new_data=data_valid)
-# Proportion of deforested pixels
-nobs <- length(data_valid$fordefor2010)  # inferior to 20000 as there were NaN
-ndefor <- sum(data_valid$fordefor2010==0)  # 0 for deforestation in fordefor2010
-proba_defor <- ndefor/nobs  # not exactly 0.5
-# Probability threshold to transform probability into binary values
-proba_thresh <- quantile(data_valid$theta_pred, 1-proba_defor)  # ! must be (1-proba_defor)
-data_valid$pred[data_valid$theta_pred >= proba_thresh] <- 1
-# We check that the proportion of deforested pixel is the same for observations/predictions
-ndefor_pred <- sum(data_valid$pred == 1)
-proba_defor_pred <- ndefor_pred/nobs
-proba_defor_pred == proba_defor
-# Computing accuracy indices
-pred <- data_valid$pred
-obs <- 1-data_valid$fordefor2010
-performance_iCAR <- as.data.frame(far$accuracy_indices(pred,obs))
+# Number of observations
+nforest <- sum(data_valid$fordefor2010==1)  # 1 for forest in fordefor2010
+ndefor <- sum(data_valid$fordefor2010==0)
+which_forest <- which(data_valid$fordefor2010==1)							
+which_defor <- which(data_valid$fordefor2010==0)
+# Performance at 1%, 10%, 25%, 50% change
+performance_iCAR <- data.frame(perc=c(1,5,10,25,50),FOM=NA,OA=NA,EA=NA,
+															 Spe=NA,Sen=NA,TSS=NA,K=NA)
+for (i in 1:length(performance_iCAR$perc)) {
+	perc <- performance_iCAR$perc[i]
+	ndefor_samp <- min(round(nforest*(perc/100)/(1-perc/100)),ndefor)
+	samp_defor <- sample(which_defor,size=ndefor_samp,replace=FALSE)
+	data_extract <- data_valid[c(which_forest,samp_defor),]
+	data_extract$pred <- 0
+	# Probability threshold to transform probability into binary values
+	proba_thresh <- quantile(data_extract$theta_pred, 1-perc/100)  # ! must be 1-proba_defor
+	data_extract$pred[data_extract$theta_pred >= proba_thresh] <- 1
+	# Computing accuracy indices
+	pred <- data_extract$pred
+	obs <- 1-data_extract$fordefor2010
+	perf <- as.data.frame(far$accuracy_indices(pred,obs)) %>%
+		dplyr::select(FOM,OA,EA,Spe,Sen,TSS,K)
+	performance_iCAR[i,2:8] <- perf
+}
 
 # ========================================================
 # Model comparison
