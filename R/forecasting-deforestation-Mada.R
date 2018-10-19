@@ -8,11 +8,10 @@
 # ==============================================================================
 
 # Environmental variables
-Sys.unsetenv("DISPLAY") # Remove DISPLAY for Python plot
+#Sys.unsetenv("DISPLAY") # Remove DISPLAY for Python plot
 
 # Libraries
 require(reticulate)
-#use_python("/usr/bin/python")
 require(glue)
 require(curl)
 require(dplyr)
@@ -30,14 +29,14 @@ source("R/dfp_plot.R")
 
 # Create conda virtual environment
 if (!dir.exists("far_venv")) {
-	# Local virtualenv
-	Sys.setenv(WORKON_HOME=getwd())
-	# Create virtualenv
-	virtualenv_create("far_venv")
-	# Install forestatrisk package
-	git_forestatrisk <- "https://github.com/ghislainv/forestatrisk/archive/master.zip"
-	virtualenv_install("far_venv",git_forestatrisk,ignore_installed=TRUE)
-	virtualenv_install("far_venv","statsmodels")
+  # Local virtualenv
+  Sys.setenv(WORKON_HOME=getwd())
+  # Create virtualenv
+  virtualenv_create("far_venv")
+  # Install forestatrisk package
+  git_forestatrisk <- "https://github.com/ghislainv/forestatrisk/archive/master.zip"
+  virtualenv_install("far_venv",git_forestatrisk,ignore_installed=TRUE)
+  virtualenv_install("far_venv","statsmodels")
 }
 # Activate this virtualenv
 # use_virtualenv("far_venv_py2", required=TRUE) # Python 2
@@ -68,20 +67,20 @@ if (!dir.exists("data")) {
 
 # Files
 files <- c("fordefor2010.tif", "dist_edge.tif", "dist_defor.tif",
-				 "altitude.tif", "slope.tif", "aspect.tif",
-				 "dist_road.tif", "dist_town.tif", "dist_river.tif",
-				 "sapm.tif", "roads.kml", "towns.kml", "rivers.kml", "sapm.kml")
+           "altitude.tif", "slope.tif", "aspect.tif",
+           "dist_road.tif", "dist_town.tif", "dist_river.tif",
+           "sapm.tif", "roads.kml", "towns.kml", "rivers.kml", "sapm.kml")
 
 # Download model data
 for (i in files) {
   if (!file.exists(glue("data/model/{i}"))) {
-		f <- glue("https://zenodo.org/record/259582/files/{i}")
-		curl_download(f, glue("data/model/{i}"), quiet=FALSE)
-	}
+    f <- glue("https://zenodo.org/record/259582/files/{i}")
+    curl_download(f, glue("data/model/{i}"), quiet=FALSE)
+  }
 }
 
 # Download validation data
-if (!file.exists("data/validation/for2014.tif")) {
+if (!file.exists("data/validation/for2017.tif")) {
   f <- "http://bioscenemada.cirad.fr/FileTransfer/for2014.tif"
   curl_download(f, "data/validation/for2014.tif", quiet=FALSE)
 }
@@ -105,10 +104,10 @@ if (!dir.exists("output")) {
 # Training data-set
 if (!file.exists("output/sample.txt")) {
   samp <- far$sample(nsamp=10000L, Seed=1234L, csize=10L,
-                       var_dir="data/model",
-                       input_forest_raster="fordefor2010.tif",
-                       output_file="output/sample.txt",
-                       blk_rows=1L)
+                     var_dir="data/model",
+                     input_forest_raster="fordefor2010.tif",
+                     output_file="output/sample.txt",
+                     blk_rows=1L)
 }
 samp <- read.table("output/sample.txt", header=TRUE, sep=",")
 set.seed(1234)
@@ -126,8 +125,8 @@ data_train$trials <- 1
 
 # Spatial cells for spatial-autocorrelation
 neighborhood <- far$cellneigh_ctry(raster="data/model/fordefor2010.tif",
-																	 vector="data/mada/mada38s.shp",
-																	 csize=10L, rank=1L)
+                                   vector="data/mada/mada38s.shp",
+                                   csize=10L, rank=1L)
 nneigh <- neighborhood[[1]]
 adj <- neighborhood[[2]]
 cell_in <- neighborhood[[3]]
@@ -136,28 +135,28 @@ ncell <- neighborhood[[4]]
 # Udpate cell number in dataset
 cell_rank <- vector()
 for (i in 1:nrow(data_train)) {
-	cell_rank[i] <- which(cell_in==data_train$cell[i])-1 # ! cells start at zero
+  cell_rank[i] <- which(cell_in==data_train$cell[i])-1 # ! cells start at zero
 }
 data_train$cell <- cell_rank
 
 # Formula
 formula <- paste0("I(1-fordefor2010) + trials ~ C(sapm) + scale(altitude) + scale(slope) +",
-									"scale(dist_defor) + np.power(scale(dist_defor),2) + ",
-									"scale(dist_edge) + ",
-									"scale(dist_road) + scale(dist_town) + cell")
+                  "scale(dist_defor) + np.power(scale(dist_defor),2) + ",
+                  "scale(dist_edge) + ",
+                  "scale(dist_road) + scale(dist_town) + cell")
 
 # Model
 mod_binomial_iCAR <- far$model_binomial_iCAR(
-	# Observations
-	suitability_formula=formula, data=r_to_py(data_train),
-	# Spatial structure
-	n_neighbors=np_array(nneigh,dtype="int32"), neighbors=np_array(adj,dtype="int32"),
-	# Environment
-	eval_env=-1L,
-	# Chains
-	burnin=1000L, mcmc=1000L, thin=1L,
-	# Starting values
-	beta_start=-99)
+  # Observations
+  suitability_formula=formula, data=r_to_py(data_train),
+  # Spatial structure
+  n_neighbors=np_array(nneigh,dtype="int32"), neighbors=np_array(adj,dtype="int32"),
+  # Environment
+  eval_env=-1L,
+  # Chains
+  burnin=1000L, mcmc=1000L, thin=1L,
+  # Starting values
+  beta_start=-99)
 
 # # Save model specifications
 # model <- list(_x_design_info=mod_binomial_iCAR$"_x_design_info",
@@ -172,9 +171,9 @@ sink()
 
 # Plot traces and posteriors
 traces_fig <- mod_binomial_iCAR$plot(output_file="output/mcmc.pdf",
-																		 plots_per_page=3L,
-																		 figsize=c(9,6),
-																		 dpi=100)
+                                     plots_per_page=3L,
+                                     figsize=c(9,6),
+                                     dpi=100)
 
 # ========================================================
 # Resampling spatial random effects
@@ -186,8 +185,8 @@ rho[cell_in+1] <- mod_binomial_iCAR$rho
 
 # Resample
 far$resample_rho(rho=r_to_py(rho), input_raster="data/model/fordefor2010.tif",
-								 output_file="output/rho.tif",
-								 csize_orig=10L, csize_new=1L)
+                 output_file="output/rho.tif",
+                 csize_orig=10L, csize_new=1L)
 
 # Plot random effects
 far$plot$rho("output/rho_orig.tif",output_file="output/rho_orig.png")
@@ -198,9 +197,9 @@ mada <- rgdal::readOGR(dsn="data/mada",layer="mada38s")
 r.rho_orig <- raster("output/rho_orig.tif")
 r.rho <- raster("output/rho.tif")
 rho_plot(r.rho_orig, mada, output_file="output/rho_orig_ggplot.png",
-				 quantiles_legend=c(0.025,0.975),width=4.5, height=8)
+         quantiles_legend=c(0.025,0.975),width=4.5, height=8)
 rho_plot(r.rho, mada, output_file="output/rho_ggplot.png",
-				 quantiles_legend=c(0.025,0.975),width=4.5, height=8)
+         quantiles_legend=c(0.025,0.975),width=4.5, height=8)
 
 # ========================================================
 # Predicting spatial probability of deforestation
@@ -208,10 +207,10 @@ rho_plot(r.rho, mada, output_file="output/rho_ggplot.png",
 
 # Compute predictions
 far$predict_raster_binomial_iCAR(mod_binomial_iCAR, var_dir="data/model",
-																 input_cell_raster="output/rho.tif",
-											           input_forest_raster="data/model/fordefor2010.tif",
-											           output_file="output/pred_binomial_iCAR.tif",
-											           blk_rows=128L)
+                                 input_cell_raster="output/rho.tif",
+                                 input_forest_raster="data/model/fordefor2010.tif",
+                                 output_file="output/pred_binomial_iCAR.tif",
+                                 blk_rows=128L)
 
 # Plot predictions
 far$plot$prob("output/pred_binomial_iCAR.tif",output_file="output/pred_binomial_iCAR.png")
@@ -221,9 +220,9 @@ far$plot$prob("output/pred_binomial_iCAR.tif",output_file="output/pred_binomial_
 # ========================================================
 
 deforest <- far$deforest(input_raster="output/pred_binomial_iCAR.tif",
-												 hectares=4000000,
-												 output_file="output/forest_cover_2050.tif",
-												 blk_rows=128L)
+                         hectares=4000000,
+                         output_file="output/forest_cover_2050.tif",
+                         blk_rows=128L)
 
 # Plot future forest cover
 far$plot$fcc("output/forest_cover_2050.tif",output_file="output/forest_cover_2050.png")
@@ -233,65 +232,66 @@ far$plot$fcc("output/forest_cover_2050.tif",output_file="output/forest_cover_205
 # ========================================================
 
 computeAUC <- function(pos.scores, neg.scores, n_sample=100000) {
-	# Args:
-	#   pos.scores: scores of positive observations
-	#   neg.scores: scores of negative observations
-	#   n_samples : number of samples to approximate AUC
-	
-	pos.sample <- sample(pos.scores, n_sample, replace=TRUE)
-	neg.sample <- sample(neg.scores, n_sample, replace=TRUE)
-	AUC <- mean(1.0*(pos.sample > neg.sample) + 0.5*(pos.sample==neg.sample))
-	return(AUC)
+  # Args:
+  #   pos.scores: scores of positive observations
+  #   neg.scores: scores of negative observations
+  #   n_samples : number of samples to approximate AUC
+  
+  pos.sample <- sample(pos.scores, n_sample, replace=TRUE)
+  neg.sample <- sample(neg.scores, n_sample, replace=TRUE)
+  AUC <- mean(1.0*(pos.sample > neg.sample) + 0.5*(pos.sample==neg.sample))
+  return(AUC)
 }
 
 performance_index <- function(data_valid,model="nochange") {
-	# Model predictions for validation dataset
-	if (model=="nochange") {
-		data_valid$theta_pred <- 0
-	} else if (model=="null") {
-		data_valid$theta_pred <- runif(nrow(data_valid))
-	} else {
-		data_valid$theta_pred <- model$predict(data_valid)
-	}
-	# Number of observations
-	nforest <- sum(data_valid$fordefor2010==1)  # 1 for forest in fordefor2010
-	ndefor <- sum(data_valid$fordefor2010==0)
-	which_forest <- which(data_valid$fordefor2010==1)							
-	which_defor <- which(data_valid$fordefor2010==0)
-	# Performance at 1%, 10%, 25%, 50% change
-	performance <- data.frame(perc=c(1,5,10,25,50),FOM=NA,OA=NA,EA=NA,
-														Spe=NA,Sen=NA,TSS=NA,K=NA,AUC=NA)
-	# Loop on prevalence
-	for (i in 1:length(performance$perc)) {
-		perc <- performance$perc[i]
-		ndefor_samp <- min(round(nforest*(perc/100)/(1-perc/100)),ndefor)
-		samp_defor <- sample(which_defor,size=ndefor_samp,replace=FALSE)
-		data_extract <- data_valid[c(which_forest,samp_defor),]
-		data_extract$pred <- 0
-		# Probability threshold to transform probability into binary values
-		if (model=="nochange") {
-			proba_thresh <- 1
-		} else {
-		  proba_thresh <- quantile(data_extract$theta_pred, 1-perc/100)  # ! must be 1-proba_defor
-		}
-		data_extract$pred[data_extract$theta_pred >= proba_thresh] <- 1
-		# Computing accuracy indices
-		pred <- data_extract$pred
-		obs <- 1-data_extract$fordefor2010
-		perf <- as.data.frame(far$accuracy_indices(pred,obs)) %>% 
-			dplyr::select(FOM,OA,EA,Spe,Sen,TSS,K)
-		# AUC
-		pos.scores <- data_extract$theta_pred[data_extract$fordefor2010==0]
-		neg.scores <- data_extract$theta_pred[data_extract$fordefor2010==1]
-		performance$AUC[i] <- round(computeAUC(pos.scores,neg.scores),2)
-	}
-	return(performance)
+  # Model predictions for validation dataset
+  if (model=="nochange") {
+    data_valid$theta_pred <- 0
+  } else if (model=="null") {
+    data_valid$theta_pred <- runif(nrow(data_valid))
+  } else {
+    data_valid$theta_pred <- model$predict(data_valid)
+  }
+  # Number of observations
+  nforest <- sum(data_valid$fordefor2010==1)  # 1 for forest in fordefor2010
+  ndefor <- sum(data_valid$fordefor2010==0)
+  which_forest <- which(data_valid$fordefor2010==1)							
+  which_defor <- which(data_valid$fordefor2010==0)
+  # Performance at 1%, 10%, 25%, 50% change
+  performance <- data.frame(perc=c(1,5,10,25,50),FOM=NA,OA=NA,EA=NA,
+                            Spe=NA,Sen=NA,TSS=NA,K=NA,AUC=NA)
+  # Loop on prevalence
+  for (i in 1:length(performance$perc)) {
+    perc <- performance$perc[i]
+    ndefor_samp <- min(round(nforest*(perc/100)/(1-perc/100)),ndefor)
+    samp_defor <- sample(which_defor,size=ndefor_samp,replace=FALSE)
+    data_extract <- data_valid[c(which_forest,samp_defor),]
+    data_extract$pred <- 0
+    # Probability threshold to transform probability into binary values
+    if (model=="nochange") {
+      proba_thresh <- 1
+    } else {
+      proba_thresh <- quantile(data_extract$theta_pred, 1-perc/100)  # ! must be 1-proba_defor
+    }
+    data_extract$pred[data_extract$theta_pred >= proba_thresh] <- 1
+    # Computing accuracy indices
+    pred <- data_extract$pred
+    obs <- 1-data_extract$fordefor2010
+    perf <- as.data.frame(far$accuracy_indices(pred,obs)) %>% 
+      dplyr::select(FOM,OA,EA,Spe,Sen,TSS,K)
+    performance[i,2:8] <- perf
+    # AUC
+    pos.scores <- data_extract$theta_pred[data_extract$fordefor2010==0]
+    neg.scores <- data_extract$theta_pred[data_extract$fordefor2010==1]
+    performance$AUC[i] <- round(computeAUC(pos.scores,neg.scores),2)
+  }
+  return(performance)
 }
 
 # Udpate cell number in dataset
 cell_rank <- vector()
 for (i in 1:nrow(data_valid)) {
-	cell_rank[i] <- which(cell_in==data_valid$cell[i])-1 # ! cells start at zero
+  cell_rank[i] <- which(cell_in==data_valid$cell[i])-1 # ! cells start at zero
 }
 data_valid$cell <- cell_rank
 
@@ -311,7 +311,7 @@ deviance_full <- 0
 # Null model
 formula_null <- "I(1-fordefor2010) ~ 1"
 dmat_null <- patsy$dmatrices(formula_null, data=r_to_py(data_train), NA_action="drop",
-											 return_type="dataframe", eval_env=-1L)
+                             return_type="dataframe", eval_env=-1L)
 Y <- dmat_null[[1]]
 X_null <- dmat_null[[2]]
 mod_null <- sm$GLM(Y, X_null, family=sm$families$Binomial())$fit()
@@ -319,8 +319,8 @@ deviance_null <- mod_null$deviance
 
 # Model nsre with no spatial random effects
 formula_nsre <- paste0("I(1-fordefor2010) ~ C(sapm) + scale(altitude) + ",
-											"scale(slope) + scale(dist_defor) + I(scale(dist_defor)*scale(dist_defor)) + ",
-											"scale(dist_edge) + scale(dist_road) + scale(dist_town)")
+                       "scale(slope) + scale(dist_defor) + I(scale(dist_defor)*scale(dist_defor)) + ",
+                       "scale(dist_edge) + scale(dist_road) + scale(dist_town)")
 mod_nsre <- smf$glm(formula_nsre, r_to_py(data_train), family=sm$families$Binomial(), eval_env=-1L)$fit()
 deviance_nsre <- mod_nsre$deviance
 # Summary nsre
@@ -333,13 +333,13 @@ performance_nsre <- performance_index(data_valid,mod_nsre)
 # Random Forest
 source_python("Python/model_random_forest.py")
 formula_rf <- paste0("I(1-fordefor2010) ~ sapm + altitude + ",
-											 "slope + dist_defor + dist_edge + dist_road + dist_town")
+                     "slope + dist_defor + dist_edge + dist_road + dist_town")
 formula_rf_xy <- paste0("I(1-fordefor2010) ~ sapm + altitude + ",
-										 "slope + dist_defor + dist_edge + dist_road + dist_town + X + Y")
+                        "slope + dist_defor + dist_edge + dist_road + dist_town + X + Y")
 mod_rf <- model_random_forest(formula=formula_rf, data=data_train, 
-															eval_env=-1L, n_estimators=500L, n_jobs=2L)
+                              eval_env=-1L, n_estimators=500L, n_jobs=2L)
 mod_rf_xy <- model_random_forest(formula=formula_rf_xy, data=data_train, 
-															eval_env=-1L, n_estimators=500L, n_jobs=2L)
+                                 eval_env=-1L, n_estimators=500L, n_jobs=2L)
 # Performance rf
 performance_rf <- performance_index(data_valid,mod_rf)
 performance_rf_xy <- performance_index(data_valid,mod_rf_xy)
@@ -353,7 +353,7 @@ deviance_icar <- mod_binomial_iCAR$deviance
 # Dataframe
 dev <- c(deviance_null, deviance_nsre, deviance_icar, deviance_full)
 mod <- data.frame(model=c("null", "nsre", "icar", "full"),
-									deviance=round(dev))
+                  deviance=round(dev))
 perc <- 100*(1-mod$deviance/deviance_null)
 mod$perc <- round(perc)
 write.table(mod,file="output/deviance_model_comparison.txt",sep=",",row.names=FALSE)
@@ -364,9 +364,9 @@ write.table(mod,file="output/deviance_model_comparison.txt",sep=",",row.names=FA
 
 # Compute predictions with logistic regression
 fig_pred_nsre <- far$predict_raster(mod_nsre, var_dir="data/model",
-																		input_forest_raster="data/model/fordefor2010.tif",
-																		output_file="output/pred_nsre.tif",
-																		blk_rows=128L, transform=TRUE)
+                                    input_forest_raster="data/model/fordefor2010.tif",
+                                    output_file="output/pred_nsre.tif",
+                                    blk_rows=128L, transform=TRUE)
 
 # Plot predictions
 far$plot$prob("output/pred_nsre.tif",output_file="output/pred_nsre.png")
@@ -382,26 +382,26 @@ far$plot$fcc("output/forest_cover_2050_nsre.tif",output_file="output/forest_cove
 
 # Raster of differences
 far$differences(inputA = "output/forest_cover_2050.tif",inputB = "output/forest_cover_2050_nsre.tif",
-								output_file = "output/diff_iCAR_nsre_2050.tif", blk_rows = 1L)
+                output_file = "output/diff_iCAR_nsre_2050.tif", blk_rows = 1L)
 # Plot the raster of differences
 far$plot$differences("output/diff_iCAR_nsre_2050.tif",
-										 borders = "data/mada/mada38s.shp",
-										 output_file = "output/diff_iCAR_nsre_2050.png")
+                     borders = "data/mada/mada38s.shp",
+                     output_file = "output/diff_iCAR_nsre_2050.png")
 
 # With ggplot2
 r_diff <- raster("output/diff_iCAR_nsre_2050.tif")
 mada <- rgdal::readOGR(dsn="data/mada",layer="mada38s")
 rect_df <- data.frame(xmin=c(346000,793000), xmax=c(439000,886000),
-											ymin=c(7387000,7815000), ymax=c(7480000,7908000),
-											id=c(1,2))
+                      ymin=c(7387000,7815000), ymax=c(7480000,7908000),
+                      id=c(1,2))
 diff_plot(input_raster = r_diff, input_vector = mada, maxpixels=10e5,
-					rect = rect_df, output_file = "output/diff_iCAR_nsre_2050_ggplot.png")
+          rect = rect_df, output_file = "output/diff_iCAR_nsre_2050_ggplot.png")
 diff_plot(input_raster = r_diff, input_vector = mada, maxpixels=10e5,
-					ext = extent(346000, 439000, 7387000, 7480000),
-					rect = rect_df[1,], output_file = "output/diff_iCAR_nsre_2050_ggplot_zoom1.png")
+          ext = extent(346000, 439000, 7387000, 7480000),
+          rect = rect_df[1,], output_file = "output/diff_iCAR_nsre_2050_ggplot_zoom1.png")
 diff_plot(input_raster = r_diff, input_vector = mada, maxpixels=10e5,
-					ext = extent(793000, 886000, 7815000, 7908000),
-					rect = rect_df[2,], output_file = "output/diff_iCAR_nsre_2050_ggplot_zoom2.png")
+          ext = extent(793000, 886000, 7815000, 7908000),
+          rect = rect_df[2,], output_file = "output/diff_iCAR_nsre_2050_ggplot_zoom2.png")
 
 # ====================================================
 # Predictions vs. observations on the period 2010-2014
@@ -443,10 +443,10 @@ val_iCAR_df <- far$validation_npix(r_pred="output/fcc_2014_iCAR.tif",
 
 # Tidy dataset
 val_iCAR <- val_iCAR_df %>%
-	dplyr::mutate(obs_f_ha=npix2ha(obs_f),pred_f_ha=npix2ha(pred_f),
-								obs_d_ha=npix2ha(obs_d),pred_d_ha=npix2ha(pred_d)) %>%
-	dplyr::mutate(box0=0:(nrow(val_iCAR_df)-1)) %>%
-	dplyr::filter(!(obs_f==0 & obs_d==0)) # Remove squares with no forest
+  dplyr::mutate(obs_f_ha=npix2ha(obs_f),pred_f_ha=npix2ha(pred_f),
+                obs_d_ha=npix2ha(obs_d),pred_d_ha=npix2ha(pred_d)) %>%
+  dplyr::mutate(box0=0:(nrow(val_iCAR_df)-1)) %>%
+  dplyr::filter(!(obs_f==0 & obs_d==0)) # Remove squares with no forest
 
 # Coordinates of the centers of the 10-km boxes
 e <- extent(raster("output/fcc_2014_iCAR.tif"))
@@ -462,37 +462,37 @@ coeff <- c(1,2,5,10,15,25,50,75,100,150)
 box_size <- box_size0 * coeff # box_size in m
 CV <- R2 <- Cor <- vector()
 CV_f <- function(obs,pred) {
-	RMSE <- sqrt(mean((obs-pred)^2))
-	Mean <- mean(obs)
-	return(RMSE/Mean)
+  RMSE <- sqrt(mean((obs-pred)^2))
+  Mean <- mean(obs)
+  return(RMSE/Mean)
 }
 R2_f <- function(obs,pred) {
-	sum1 <- sum((obs-pred)^2)
-	sum2 <- sum((obs-mean(obs))^2)
-	return(1-sum1/sum2)
+  sum1 <- sum((obs-pred)^2)
+  sum2 <- sum((obs-mean(obs))^2)
+  return(1-sum1/sum2)
 }
 for (i in 1:length(box_size)) {
-	# Box size
-	b <- box_size[i]
-	# Number of boxes
-	ncol <- ceiling((xmax(e) - xmin(e)) / b)
-	nrow <- ceiling((ymax(e) - ymin(e)) / b)
-	nbox <- ncol * nrow
-	# Box identification
-	J <- floor((x - xmin(e)) / b)
-	I <- floor((ymax(e) - y) / b)
-	box <- I * ncol + J
-	# Sum deforested areas by box
-	obs_d <- val_iCAR %>% mutate(box=box) %>%
-		group_by(box) %>% summarise(sum_obs_d_ha=sum(obs_d_ha)) %>%
-		pull(sum_obs_d_ha)
-	pred_d <- val_iCAR %>% mutate(box=box) %>%
-		group_by(box) %>% summarise(sum_pred_d_ha=sum(pred_d_ha)) %>%
-		pull(sum_pred_d_ha)
-	#plot(obs_d,pred_d)
-	CV[i] <- CV_f(obs_d,pred_d)
-	R2[i] <- R2_f(obs_d,pred_d)
-	Cor[i] <- cor(obs_d,pred_d,method="pearson")
+  # Box size
+  b <- box_size[i]
+  # Number of boxes
+  ncol <- ceiling((xmax(e) - xmin(e)) / b)
+  nrow <- ceiling((ymax(e) - ymin(e)) / b)
+  nbox <- ncol * nrow
+  # Box identification
+  J <- floor((x - xmin(e)) / b)
+  I <- floor((ymax(e) - y) / b)
+  box <- I * ncol + J
+  # Sum deforested areas by box
+  obs_d <- val_iCAR %>% mutate(box=box) %>%
+    group_by(box) %>% summarise(sum_obs_d_ha=sum(obs_d_ha)) %>%
+    pull(sum_obs_d_ha)
+  pred_d <- val_iCAR %>% mutate(box=box) %>%
+    group_by(box) %>% summarise(sum_pred_d_ha=sum(pred_d_ha)) %>%
+    pull(sum_pred_d_ha)
+  #plot(obs_d,pred_d)
+  CV[i] <- CV_f(obs_d,pred_d)
+  R2[i] <- R2_f(obs_d,pred_d)
+  Cor[i] <- cor(obs_d,pred_d,method="pearson")
 }
 plot(coeff,CV,type="l",xlab="Box size (km)")
 plot(coeff,R2,type="l",xlab="Box size (km)")
@@ -519,10 +519,10 @@ val_nsre_df <- read.table("output/npix_nsre.txt",header=TRUE,sep=",")
 
 # Tidy dataset
 val_nsre <- val_nsre_df %>%
-	dplyr::mutate(obs_f_ha=npix2ha(obs_f),pred_f_ha=npix2ha(pred_f),
-								obs_d_ha=npix2ha(obs_d),pred_d_ha=npix2ha(pred_d)) %>%
-	dplyr::mutate(box0=0:(nrow(val_nsre_df)-1)) %>%
-	dplyr::filter(!(obs_f==0 & obs_d==0)) # Remove squares with no forest
+  dplyr::mutate(obs_f_ha=npix2ha(obs_f),pred_f_ha=npix2ha(pred_f),
+                obs_d_ha=npix2ha(obs_d),pred_d_ha=npix2ha(pred_d)) %>%
+  dplyr::mutate(box0=0:(nrow(val_nsre_df)-1)) %>%
+  dplyr::filter(!(obs_f==0 & obs_d==0)) # Remove squares with no forest
 
 # Coordinates of the centers of the 10-km boxes
 e <- extent(raster("output/fcc_2014_nsre.tif"))
@@ -538,37 +538,37 @@ coeff <- c(1,2,5,10,15,25,50,75,100,150)
 box_size <- box_size0 * coeff # box_size in m
 CV <- R2 <- Cor <- vector()
 CV_f <- function(obs,pred) {
-	RMSE <- sqrt(mean((obs-pred)^2))
-	Mean <- mean(obs)
-	return(RMSE/Mean)
+  RMSE <- sqrt(mean((obs-pred)^2))
+  Mean <- mean(obs)
+  return(RMSE/Mean)
 }
 R2_f <- function(obs,pred) {
-	sum1 <- sum((obs-pred)^2)
-	sum2 <- sum((obs-mean(obs))^2)
-	return(1-sum1/sum2)
+  sum1 <- sum((obs-pred)^2)
+  sum2 <- sum((obs-mean(obs))^2)
+  return(1-sum1/sum2)
 }
 for (i in 1:length(box_size)) {
-	# Box size
-	b <- box_size[i]
-	# Number of boxes
-	ncol <- ceiling((xmax(e) - xmin(e)) / b)
-	nrow <- ceiling((ymax(e) - ymin(e)) / b)
-	nbox <- ncol * nrow
-	# Box identification
-	J <- floor((x - xmin(e)) / b)
-	I <- floor((ymax(e) - y) / b)
-	box <- I * ncol + J
-	# Sum deforested areas by box
-	obs_d <- val_nsre %>% mutate(box=box) %>%
-		group_by(box) %>% summarise(sum_obs_d_ha=sum(obs_d_ha)) %>%
-		pull(sum_obs_d_ha)
-	pred_d <- val_nsre %>% mutate(box=box) %>%
-		group_by(box) %>% summarise(sum_pred_d_ha=sum(pred_d_ha)) %>%
-		pull(sum_pred_d_ha)
-	#plot(obs_d,pred_d)
-	CV[i] <- CV_f(obs_d,pred_d)
-	R2[i] <- R2_f(obs_d,pred_d)
-	Cor[i] <- cor(obs_d,pred_d)
+  # Box size
+  b <- box_size[i]
+  # Number of boxes
+  ncol <- ceiling((xmax(e) - xmin(e)) / b)
+  nrow <- ceiling((ymax(e) - ymin(e)) / b)
+  nbox <- ncol * nrow
+  # Box identification
+  J <- floor((x - xmin(e)) / b)
+  I <- floor((ymax(e) - y) / b)
+  box <- I * ncol + J
+  # Sum deforested areas by box
+  obs_d <- val_nsre %>% mutate(box=box) %>%
+    group_by(box) %>% summarise(sum_obs_d_ha=sum(obs_d_ha)) %>%
+    pull(sum_obs_d_ha)
+  pred_d <- val_nsre %>% mutate(box=box) %>%
+    group_by(box) %>% summarise(sum_pred_d_ha=sum(pred_d_ha)) %>%
+    pull(sum_pred_d_ha)
+  #plot(obs_d,pred_d)
+  CV[i] <- CV_f(obs_d,pred_d)
+  R2[i] <- R2_f(obs_d,pred_d)
+  Cor[i] <- cor(obs_d,pred_d)
 }
 plot(coeff,CV,type="l",xlab="Box size (km)")
 plot(coeff,R2,type="l",xlab="Box size (km)")
@@ -581,7 +581,7 @@ lines(coeff,Cor_nsre)
 
 # Backup correlation estimates
 corr_df <- data.frame(model=c("nsre","iCAR"),
-                     corr=c(corr_nsre,corr_iCAR))
+                      corr=c(corr_nsre,corr_iCAR))
 write.table(corr_df,"output/corr_df.txt",row.names=FALSE,sep=",")
 
 # ========================================================

@@ -3,6 +3,8 @@ data
 output
 *.log
 
+r-reticulate
+
 # Python virtual env
 far_venv*
 Python
