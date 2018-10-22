@@ -1,0 +1,271 @@
+---
+title: "Modelling and forecasting deforestation"
+author: "Ghislain Vieilledent"
+date: "22 octobre 2018"
+output: 
+  html_notebook:
+    theme: spacelab
+    highlight: tango
+    toc: yes
+    toc_float: yes
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE,
+	cache = TRUE
+)
+```
+
+## Set up the computing environment
+
+### Installing R libraries
+
+We first install the necessary R packages. 
+
+```{r libraries}
+# Libraries
+require(reticulate)
+require(glue)
+require(curl)
+require(dplyr)
+require(broom)
+require(ggplot2)
+require(rasterVis)
+require(rgdal)
+
+# Source R plotting functions
+source("R/dfp_plot.R")
+
+```
+
+### Python virtual environment
+
+Prerequisite:
+
+- Linux: install python, gdal and virtualenv
+- Windows: install miniconda:  
+<https://conda.io/docs/user-guide/install/index.html>
+
+```{r virtualenv}
+# forestatrisk develoment version
+git_forestatrisk <- "https://github.com/ghislainv/forestatrisk/archive/master.zip"
+
+# Linux/Windows systems
+if (R.Version()$os=="linux-gnu") {
+  if (!dir.exists("far_venv")) {
+    # Local virtualenv
+    Sys.setenv(WORKON_HOME=getwd())
+    # Create virtualenv
+    virtualenv_create("far_venv")
+    # Install forestatrisk package
+    virtualenv_install("far_venv",git_forestatrisk,ignore_installed=TRUE)
+    virtualenv_install("far_venv","statsmodels")
+  }
+  # Activate this virtualenv
+  use_virtualenv("far_venv", required=TRUE)
+} else {
+  if (!("r-reticulate" %in% conda_list()$name)) {
+    # Create conda virtual environment
+    conda_create("r-reticulate","python=3.7")
+    # Conda install with use of conda-forge
+    conda_modules <- c("pip","gdal","numpy","scipy","statsmodels")
+    conda_install("r-reticulate",conda_modules,forge=TRUE)
+    conda_install("r-reticulate",git_forestatrisk,pip=TRUE,pip_ignore_installed=FALSE)
+  }
+  # Activate this virtualenv
+  use_condaenv("r-reticulate", required=TRUE)
+}
+
+# Check python version and virtualenv
+py_config()
+
+```
+
+### Importing Python modules in R
+
+```{r importpy}
+far <- import("forestatrisk")
+patsy <- import("patsy")
+sm <- import("statsmodels.api")
+smf <- import("statsmodels.formula.api")
+
+```
+
+## Preparing the data-set
+
+### Downloading the geospatial data
+
+```{r download_data}
+# Make data directory
+if (!dir.exists("data")) {
+  dir.create("data")
+  dir.create("data/model")
+  dir.create("data/mada")
+  dir.create("data/validation")
+}
+
+# Files
+files <- c("fordefor2010.tif", "dist_edge.tif", "dist_defor.tif",
+           "altitude.tif", "slope.tif", "aspect.tif",
+           "dist_road.tif", "dist_town.tif", "dist_river.tif",
+           "sapm.tif", "roads.kml", "towns.kml", "rivers.kml", "sapm.kml")
+
+# Download model data
+for (i in files) {
+  if (!file.exists(glue("data/model/{i}"))) {
+    f <- glue("https://zenodo.org/record/259582/files/{i}")
+    curl_download(f, glue("data/model/{i}"), quiet=FALSE)
+  }
+}
+
+# Download validation data
+if (!file.exists("data/validation/for2017.tif")) {
+  f <- "http://bioscenemada.cirad.fr/FileTransfer/for2014.tif"
+  curl_download(f, "data/validation/for2014.tif", quiet=FALSE)
+}
+
+# Download mada outline
+if (!file.exists("data/mada/mada38s.shp")) {
+  f <- "http://bioscenemada.cirad.fr/FileTransfer/mada38s.zip"
+  curl_download(f, "data/mada/mada38s.zip", quiet=FALSE)
+  unzip("data/mada/mada38s.zip", exdir="data/mada")
+}
+
+```
+
+### Sampling points
+
+```{r sampling}
+# Make output directory
+if (!dir.exists("output")) {
+  dir.create("output")
+}
+
+# Training data-set
+if (!file.exists("output/sample.txt")) {
+  samp <- far$sample(nsamp=10000L, Seed=1234L, csize=10L,
+                     var_dir="data/model",
+                     input_forest_raster="fordefor2010.tif",
+                     output_file="output/sample.txt",
+                     blk_rows=1L)
+}
+samp <- read.table("output/sample.txt", header=TRUE, sep=",")
+set.seed(1234)
+train <- sample(1:20000, size=10000, replace=FALSE)
+data_train <- samp[train,] %>% dplyr::filter(complete.cases(.))
+data_valid <- samp[-train,] %>% dplyr::filter(complete.cases(.))
+head(data_train)
+
+```
+
+## Deforestation model
+
+### Spatial cells
+
+```{r spatial_cells}
+# Spatial cells for spatial-autocorrelation
+neighborhood <- far$cellneigh_ctry(raster="data/model/fordefor2010.tif",
+                                   vector="data/mada/mada38s.shp",
+                                   csize=10L, rank=1L)
+nneigh <- neighborhood[[1]]
+adj <- neighborhood[[2]]
+cell_in <- neighborhood[[3]]
+ncell <- neighborhood[[4]]
+
+# Udpate cell number in dataset
+cell_rank <- vector()
+for (i in 1:nrow(data_train)) {
+  cell_rank[i] <- which(cell_in==data_train$cell[i])-1 # ! cells start at zero
+}
+data_train$cell <- cell_rank
+
+```
+
+### Model formula
+
+```{r formula}
+# Formula
+data_train$trials <- 1  # Set number of trials to one
+formula <- paste0("I(1-fordefor2010) + trials ~ C(sapm) + scale(altitude) + scale(slope) +",
+                  "scale(dist_defor) + np.power(scale(dist_defor),2) + ",
+                  "scale(dist_edge) + ",
+                  "scale(dist_road) + scale(dist_town) + cell")
+
+
+```
+
+### Fitting model parameters
+
+```{r model}
+# Model
+mod_binomial_iCAR <- far$model_binomial_iCAR(
+  # Observations
+  suitability_formula=formula, data=data_train,
+  # Spatial structure
+  n_neighbors=np_array(nneigh,dtype="int32"), neighbors=np_array(adj,dtype="int32"),
+  # Environment
+  eval_env=-1L,
+  # Chains
+  burnin=1000L, mcmc=1000L, thin=1L,
+  # Starting values
+  beta_start=-99)
+
+```
+
+### Model summary
+
+```{r}
+sink(file="output/summary_mod_binomial_iCAR.txt")
+print(mod_binomial_iCAR)
+sink()
+print(mod_binomial_iCAR)
+```
+
+### Plot traces and posteriors
+
+```{r plot_with_py, echo=FALSE}
+traces_fig <- mod_binomial_iCAR$plot(output_file="output/mcmc.pdf",
+                                     plots_per_page=3L,
+                                     figsize=c(9,6),
+                                     dpi=100)
+```
+
+```{r plot_with_r}
+require(coda)
+mcmc <- as.mcmc(mod_binomial_iCAR$mcmc)
+plot(mcmc[,c(1:3,10,11)])
+```
+
+## Predicting spatial probability of deforestation
+
+### Resampling the spatial random effects
+
+```{r rho, fig.height=7, message=FALSE, warning=FALSE}
+# Get the spatial random effects
+rho <- rep(-9999,ncell)  # -9999 will be considered as nodata
+rho[cell_in+1] <- mod_binomial_iCAR$rho
+
+# Resample them
+far$resample_rho(rho=r_to_py(rho), input_raster="data/model/fordefor2010.tif",
+                 output_file="output/rho.tif",
+                 csize_orig=10L, csize_new=1L)
+
+# Plot random effects
+far$plot$rho("output/rho_orig.tif",output_file="output/rho_orig.png")
+far$plot$rho("output/rho.tif",output_file="output/rho.png")
+
+# Plot with R
+mada <- rgdal::readOGR(dsn="data/mada",layer="mada38s")
+r.rho_orig <- raster("output/rho_orig.tif")
+r.rho <- raster("output/rho.tif")
+rho_plot(r.rho_orig, mada, output_file="output/rho_orig_ggplot.png",
+         quantiles_legend=c(0.025,0.975),width=4.5, height=8)
+rho_plot(r.rho, mada, output_file="output/rho_ggplot.png",
+         quantiles_legend=c(0.025,0.975),width=4.5, height=8)
+
+```
+

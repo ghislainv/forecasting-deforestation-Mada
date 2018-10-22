@@ -139,9 +139,6 @@ head(data_train)
 # hSDM model
 # ========================================================
 
-# Set number of trials to one
-data_train$trials <- 1
-
 # Spatial cells for spatial-autocorrelation
 neighborhood <- far$cellneigh_ctry(raster="data/model/fordefor2010.tif",
                                    vector="data/mada/mada38s.shp",
@@ -159,6 +156,7 @@ for (i in 1:nrow(data_train)) {
 data_train$cell <- cell_rank
 
 # Formula
+data_train$trials <- 1  # Set number of trials to one
 formula <- paste0("I(1-fordefor2010) + trials ~ C(sapm) + scale(altitude) + scale(slope) +",
                   "scale(dist_defor) + np.power(scale(dist_defor),2) + ",
                   "scale(dist_edge) + ",
