@@ -8,7 +8,7 @@
 # ==============================================================================
 
 # Environmental variables
-#Sys.unsetenv("DISPLAY") # Remove DISPLAY for Python plot
+Sys.unsetenv("DISPLAY") # Remove DISPLAY for Python plot
 
 # Libraries
 require(reticulate)
@@ -27,20 +27,39 @@ source("R/dfp_plot.R")
 # Setup Python virtual environment
 # ================================
 
-# Create conda virtual environment
-if (!dir.exists("far_venv")) {
-  # Local virtualenv
-  Sys.setenv(WORKON_HOME=getwd())
-  # Create virtualenv
-  virtualenv_create("far_venv")
-  # Install forestatrisk package
-  git_forestatrisk <- "https://github.com/ghislainv/forestatrisk/archive/master.zip"
-  virtualenv_install("far_venv",git_forestatrisk,ignore_installed=TRUE)
-  virtualenv_install("far_venv","statsmodels")
+# Note:
+# Linux: install python, gdal and virtualenv
+# Windows: install miniconda: https://conda.io/docs/user-guide/install/index.html
+
+# forestatrisk develoment version
+git_forestatrisk <- "https://github.com/ghislainv/forestatrisk/archive/master.zip"
+
+# Linux/Windows systems
+if (R.Version()=="linux-gnu") {
+  if (!dir.exists("far_venv")) {
+    # Local virtualenv
+    Sys.setenv(WORKON_HOME=getwd())
+    # Create virtualenv
+    virtualenv_create("far_venv")
+    # Install forestatrisk package
+    virtualenv_install("far_venv",git_forestatrisk,ignore_installed=TRUE)
+    virtualenv_install("far_venv","statsmodels")
+  }
+  # Activate this virtualenv
+  use_virtualenv("far_venv", required=TRUE)
+} else {
+  if (!("r-reticulate" %in% conda_list()$name)) {
+    # Create conda virtual environment
+    conda_create("r-reticulate","python=3.7")
+    # Conda install with use of conda-forge
+    conda_modules <- c("pip","gdal","numpy","scipy","statsmodels")
+    conda_install("r-reticulate",conda_modules,forge=TRUE)
+    conda_install("r-reticulate",git_forestatrisk,pip=TRUE,pip_ignore_installed=FALSE)
+  }
+  # Activate this virtualenv
+  use_condaenv("r-reticulate", required=TRUE)
 }
-# Activate this virtualenv
-# use_virtualenv("far_venv_py2", required=TRUE) # Python 2
-use_virtualenv("far_venv", required=TRUE) # Python 3
+
 # Check python version and virtualenv
 py_config()
 
