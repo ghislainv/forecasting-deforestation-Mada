@@ -5,7 +5,7 @@ date: "22 octobre 2018"
 output:
   html_notebook:
     highlight: tango
-    number_sections: yes
+    number_sections: no
     theme: spacelab
     toc: yes
     toc_float: yes
@@ -63,7 +63,9 @@ Point your browser to `localhost:8787` to access RStudio interface. Log in with 
 In RStudio, open a terminal and clone the GitHub repository locally:  
 `git clone https://github.com/ghislainv/forecasting-deforestation-Mada`
 
-Navigate with RStudio in the folder named `forecasting-deforestation-Mada` and open the file named `training.Rmd`. Rmarkdown files (`*.Rmd`) can be used in R to embbed text, code, table and figues inside a unique document. Code are organized into 'chunks' that can be executed step by step. I used this original file to write the tutorial available at <https://ecology.ghislainv.fr/forecasting-deforestation-Mada>.
+Navigate with RStudio in the folder named `forecasting-deforestation-Mada` and open the R Notebook file named `training.Rmd`. R Markdown files (`*.Rmd`) can be used in R to embbed text, code, table and figues inside a unique document. Code are organized into 'chunks' that can be executed independently and interactively. An R Notebook is an R Markdown document with output visible immediately beneath the input. 
+
+I used this notebook to write the tutorial available at <https://ecology.ghislainv.fr/forecasting-deforestation-Mada>.
 
 In the preambule, change the author and date.
 
