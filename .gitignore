@@ -16,6 +16,7 @@ Python
 
 # Notebooks
 *.nb.html
+!docs/training.nb.html
 
 # Session Data files
 .RData

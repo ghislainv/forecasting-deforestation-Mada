@@ -2,12 +2,16 @@
 title: "Modelling and forecasting deforestation"
 author: "Ghislain Vieilledent"
 date: "22 octobre 2018"
-output: 
+output:
   html_notebook:
-    theme: spacelab
     highlight: tango
+    number_sections: yes
+    theme: spacelab
     toc: yes
     toc_float: yes
+  html_document:
+    df_print: paged
+    toc: yes
 ---
 
 ```{r setup, include=FALSE}
@@ -39,10 +43,59 @@ Some computations, such as computation by blocks on large raster files, were mor
 
 ### Load the `forestatrisk` Docker image
 
+Download the image from internet with the following command in a terminal:  
+`docker pull ghislainv/docker-forestatrisk .` (do not forget the final ".")
 
+Note: If the internet connection is slow, use a USB key and copy the image somewhere on your computer and load it with the following command:  
+`docker load -i <path to image tar file>`
 
+Run the container with `docker run -d -e PASSWORD=PWD -p 8787:8787 -v ORIGIN_FOLDER:/home/rstudio ghislainv/docker-forestatrisk`.  
+
+Note:
+
+- Set your own password `PWD`, it cannot be `rstudio`.
+- Replace `ORIGIN_FOLDER` with a folder on your local machine where you want to save the R scripts. For example `/c/Users/YOUR_NAME` or `/home/YOUR_NAME`.
+
+Point your browser to `localhost:8787` to access RStudio interface. Log in with `rstudio/PWD`.
+
+### Get the tutorial
+
+In RStudio, open a terminal and clone the GitHub repository locally:  
+`git clone https://github.com/ghislainv/forecasting-deforestation-Mada`
+
+Navigate with RStudio in the folder named `forecasting-deforestation-Mada` and open the file named `training.Rmd`. Rmarkdown files (`*.Rmd`) can be used in R to embbed text, code, table and figues inside a unique document. Code are organized into 'chunks' that can be executed step by step. I used this original file to write the tutorial available at <https://ecology.ghislainv.fr/forecasting-deforestation-Mada>.
+
+In the preambule, change the author and date.
+
+### Loading libraries in R
+
+```{r R_libraries}
+# Environmental variables
+Sys.unsetenv("DISPLAY") # Remove DISPLAY for Python plot
+
+# Libraries
+require(reticulate)
+require(glue)
+require(curl)
+require(dplyr)
+require(broom)
+require(ggplot2)
+require(rasterVis)
+require(rgdal)
+
+# Source R plotting functions
+source("R/dfp_plot.R")
+```
 
 ### Importing Python modules in R
+
+Specify the Python version to use.
+
+```{r}
+use_python("/usr/bin/python3.5")
+```
+
+Import the Python modules into R.
 
 ```{r importpy}
 far <- import("forestatrisk")
@@ -81,8 +134,8 @@ for (i in files) {
 
 # Download validation data
 if (!file.exists("data/validation/for2017.tif")) {
-  f <- "http://bioscenemada.cirad.fr/FileTransfer/for2014.tif"
-  curl_download(f, "data/validation/for2014.tif", quiet=FALSE)
+  f <- "http://bioscenemada.cirad.fr/FileTransfer/for2017.tif"
+  curl_download(f, "data/validation/for2017.tif", quiet=FALSE)
 }
 
 # Download mada outline
