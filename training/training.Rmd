@@ -9,9 +9,8 @@ output:
     theme: spacelab
     toc: yes
     toc_float: yes
-  html_document:
-    df_print: paged
-    toc: yes
+bibliography: bib/biblio.bib
+biblio-style: bib/journal-of-applied-ecology.csl
 ---
 
 ```{r setup, include=FALSE}
@@ -21,6 +20,9 @@ knitr::opts_chunk$set(
 	message = FALSE,
 	warning = FALSE,
 	cache = TRUE
+)
+knitr::opts_knit$set(
+  root.dir = "../" 
 )
 ```
 
@@ -43,11 +45,9 @@ Some computations, such as computation by blocks on large raster files, were mor
 
 ### Load the `forestatrisk` Docker image
 
-Download the image from internet with the following command in a terminal:  
-`docker pull ghislainv/docker-forestatrisk .` (do not forget the final ".")
+Download the image from internet with the following command in a terminal: `docker pull ghislainv/docker-forestatrisk .` (do not forget the final ".")
 
-Note: If the internet connection is slow, use a USB key and copy the image somewhere on your computer and load it with the following command:  
-`docker load -i <path to image tar file>`
+Note: If the internet connection is slow, use a USB key and copy the image somewhere on your computer and load it with the following command: `docker load -i <path to image tar file>`
 
 Run the container with `docker run -d -e PASSWORD=PWD -p 8787:8787 -v ORIGIN_FOLDER:/home/rstudio ghislainv/docker-forestatrisk`.  
 
@@ -67,7 +67,7 @@ Navigate with RStudio in the folder named `forecasting-deforestation-Mada` and o
 
 I used this notebook to write the tutorial available at <https://ecology.ghislainv.fr/forecasting-deforestation-Mada>.
 
-In the preambule, change the author and date.
+In the preambule, change the author and date with your name and today's date.
 
 ### Loading libraries in R
 
@@ -95,6 +95,7 @@ Specify the Python version to use.
 
 ```{r}
 use_python("/usr/bin/python3.5")
+py_config()
 ```
 
 Import the Python modules into R.
@@ -110,6 +111,17 @@ smf <- import("statsmodels.formula.api")
 ## Preparing the data-set
 
 ### Downloading the geospatial data
+
+To model the spatial probability of deforestation, we need a map of the past deforestation and maps of potential explicative environmental variables. Environmental variables can be derived from topography (altitude and slope), accessibility (distance to roads, towns, and forest edge), deforestation history (distance to previous deforestation) or landscape policy (location inside a protected area) for example. In our example, we use the following variables :
+
+
+
+1. <http://bioscenemada.cirad.fr>, deforestation maps from @Vieilledent2018
+2. <http://srtm.csi.cgiar.org>, SRTM 90m Digital Elevation Database v4.1
+3. <http://www.geofabrik.de>, data extracts from the OpenStreetMap project for Madagascar,
+4. <http://rebioma.net>, SAPM ("Système des Aires Protégées à Madagascar"), 20/12/2010 version
+
+
 
 ```{r download_data}
 # Make data directory
@@ -281,3 +293,4 @@ rho_plot(r.rho, mada, output_file="output/rho_ggplot.png",
 
 ```
 
+## References
