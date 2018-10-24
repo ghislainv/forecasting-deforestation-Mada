@@ -20,70 +20,27 @@ knitr::opts_chunk$set(
 )
 ```
 
-## Set up the computing environment
+## Computing environment
 
-### Installing R libraries
+### Installing Docker
 
-We first install the necessary R packages. 
+Docker is used to run software packages called "containers". Containers are isolated from each other and bundle their own tools, libraries and configuration files. Containers are created from "images" that specify their precise contents.
 
-```{r libraries}
-# Libraries
-require(reticulate)
-require(glue)
-require(curl)
-require(dplyr)
-require(broom)
-require(ggplot2)
-require(rasterVis)
-require(rgdal)
+To install Docker for your operating system, go to <https://docs.docker.com/install/>. For Windows user, go directly to <https://docs.docker.com/docker-for-windows/install/>.
 
-# Source R plotting functions
-source("R/dfp_plot.R")
+### Docker image
 
-```
+For our tutorial, we have built a specific Docker image including R and Python:
 
-### Python virtual environment
+- R computing environment: R 3.5.1, RStudio, and various R packages (ex. knitr, ggplot2, reticulate).
+- Python computing environment: Python 3, and various Python packages (ex. numpy, pandas, matplotlib, and forestatrisk).
 
-Prerequisite:
+Some computations, such as computation by blocks on large raster files, were more easily coded and faster with Python. That's why we decided to use Python as a complementary language to R. The `reticulate` R package allow us to use Python functions from R and thus to work in a single computing environment within RStudio.
 
-- Linux: install python, gdal and virtualenv
-- Windows: install miniconda:  
-<https://conda.io/docs/user-guide/install/index.html>
+### Load the `forestatrisk` Docker image
 
-```{r virtualenv}
-# forestatrisk develoment version
-git_forestatrisk <- "https://github.com/ghislainv/forestatrisk/archive/master.zip"
 
-# Linux/Windows systems
-if (R.Version()$os=="linux-gnu") {
-  if (!dir.exists("far_venv")) {
-    # Local virtualenv
-    Sys.setenv(WORKON_HOME=getwd())
-    # Create virtualenv
-    virtualenv_create("far_venv")
-    # Install forestatrisk package
-    virtualenv_install("far_venv",git_forestatrisk,ignore_installed=TRUE)
-    virtualenv_install("far_venv","statsmodels")
-  }
-  # Activate this virtualenv
-  use_virtualenv("far_venv", required=TRUE)
-} else {
-  if (!("r-reticulate" %in% conda_list()$name)) {
-    # Create conda virtual environment
-    conda_create("r-reticulate","python=3.7")
-    # Conda install with use of conda-forge
-    conda_modules <- c("pip","gdal","numpy","scipy","statsmodels")
-    conda_install("r-reticulate",conda_modules,forge=TRUE)
-    conda_install("r-reticulate",git_forestatrisk,pip=TRUE,pip_ignore_installed=FALSE)
-  }
-  # Activate this virtualenv
-  use_condaenv("r-reticulate", required=TRUE)
-}
 
-# Check python version and virtualenv
-py_config()
-
-```
 
 ### Importing Python modules in R
 
