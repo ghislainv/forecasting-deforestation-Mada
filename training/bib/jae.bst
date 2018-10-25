@@ -1,19 +1,14 @@
 %%
-%% This is file `functional_ecol.bst',
+%% This is file `JAE.bst',
 %% generated with the docstrip utility.
 %%
 %% The original source files were:
 %%
-%% merlin.mbs  (with options: `head,ay,nat,nm-rvvc,jnrlab,keyxyr,dt-beg,yr-par,yrp-x,note-yr,vol-bf,vnum-x,volp-com,num-xser,jnm-x,edpar,edby-par,edbyx,blk-tit,in-x,pp,ed,abr,xedn,amper,and-xcom,etal-xc,etal-it,nfss,,{}')
-%% physjour.mbs  (with options: `ay,nat,nm-rvvc,jnrlab,keyxyr,dt-beg,yr-par,yrp-x,note-yr,vol-bf,vnum-x,volp-com,num-xser,jnm-x,edpar,edby-par,edbyx,blk-tit,in-x,pp,ed,abr,xedn,amper,and-xcom,etal-xc,etal-it,nfss,,{}')
-%% geojour.mbs  (with options: `ay,nat,nm-rvvc,jnrlab,keyxyr,dt-beg,yr-par,yrp-x,note-yr,vol-bf,vnum-x,volp-com,num-xser,jnm-x,edpar,edby-par,edbyx,blk-tit,in-x,pp,ed,abr,xedn,amper,and-xcom,etal-xc,etal-it,nfss,,{}')
-%% photjour.mbs  (with options: `ay,nat,nm-rvvc,jnrlab,keyxyr,dt-beg,yr-par,yrp-x,note-yr,vol-bf,vnum-x,volp-com,num-xser,jnm-x,edpar,edby-par,edbyx,blk-tit,in-x,pp,ed,abr,xedn,amper,and-xcom,etal-xc,etal-it,nfss,,{}')
-%% merlin.mbs  (with options: `tail,ay,nat,nm-rvvc,jnrlab,keyxyr,dt-beg,yr-par,yrp-x,note-yr,vol-bf,vnum-x,volp-com,num-xser,jnm-x,edpar,edby-par,edbyx,blk-tit,in-x,pp,ed,abr,xedn,amper,and-xcom,etal-xc,etal-it,nfss,,{}')
+%% merlin.mbs  (with options: `ay,nat,vonx,nm-rvvc,keyxyr,dt-beg,yr-par,yrp-x,note-yr,atit-u,vol-bf,vnum-x,volp-com,num-xser,isbn,issn,edby-par,edbyx,pp,ed,abr,ord,amper,and-xcom,etal-xc,etal-it,url,url-nl,nfss,')
 %% ----------------------------------------
-%% *** BibTeX style (bst) for Functional Ecology ***
-%% Created by Og DeSouza <og.souza@ufv.br>
-%% using custom-bib
-%% Copyright 1994-2011 Patrick W Daly
+%% *** Journal of Animal Ecology / Journal of Applied Ecology ***
+%% 
+%% Copyright 1994-2005 Patrick W Daly
  % ===============================================================
  % IMPORTANT NOTICE:
  % This bibliographic style (bst) file has been generated from one or
@@ -25,7 +20,7 @@
  % version 1 of the License, or any later version.
  % ===============================================================
  % Name and version information of the main mbs file:
- % \ProvidesFile{merlin.mbs}[2011/11/18 4.33 (PWD, AO, DPC)]
+ % \ProvidesFile{merlin.mbs}[2005/10/17 4.14 (PWD, AO, DPC)]
  %   For use with BibTeX version 0.99a or later
  %-------------------------------------------------------------------
  % This bibliography style file is intended for texts in ENGLISH
@@ -50,7 +45,7 @@
  %   \citep*{key} ==>>               (Jones, Baker, and Smith, 1990)
  %   \citep[chap. 2]{key} ==>>       (Jones et al., 1990, chap. 2)
  %   \citep[e.g.][]{key} ==>>        (e.g. Jones et al., 1990)
- %   \citep[e.g.][p. 32]{key} ==>>   (e.g. Jones et al., 1990, p. 32)
+ %   \citep[e.g.][p. 32]{key} ==>>   (e.g. Jones et al., p. 32)
  %   \citeauthor{key} ==>>           Jones et al.
  %   \citeauthor*{key} ==>>          Jones, Baker, and Smith
  %   \citeyear{key} ==>>             1990
@@ -66,6 +61,8 @@ ENTRY
     eid
     howpublished
     institution
+    isbn
+    issn
     journal
     key
     month
@@ -78,6 +75,7 @@ ENTRY
     series
     title
     type
+    url
     volume
     year
   }
@@ -243,7 +241,7 @@ FUNCTION {bbl.nr}
 { "no." }
 
 FUNCTION {bbl.in}
-{ "in" }
+{ "" }
 
 FUNCTION {bbl.pages}
 { "pp." }
@@ -255,13 +253,40 @@ FUNCTION {bbl.chapter}
 { "chap." }
 
 FUNCTION {bbl.techrep}
-{ "Tech. Rep." }
+{ "" }
 
 FUNCTION {bbl.mthesis}
 { "Master's thesis" }
 
 FUNCTION {bbl.phdthesis}
 { "Ph.D. thesis" }
+
+FUNCTION {bbl.first}
+{ "1st" }
+
+FUNCTION {bbl.second}
+{ "2nd" }
+
+FUNCTION {bbl.third}
+{ "3rd" }
+
+FUNCTION {bbl.fourth}
+{ "4th" }
+
+FUNCTION {bbl.fifth}
+{ "5th" }
+
+FUNCTION {bbl.st}
+{ "st" }
+
+FUNCTION {bbl.nd}
+{ "nd" }
+
+FUNCTION {bbl.rd}
+{ "rd" }
+
+FUNCTION {bbl.th}
+{ "th" }
 
 MACRO {jan} {"Jan."}
 
@@ -287,253 +312,27 @@ MACRO {nov} {"Nov."}
 
 MACRO {dec} {"Dec."}
 
- %-------------------------------------------------------------------
- % Begin module:
- % \ProvidesFile{physjour.mbs}[2002/01/14 2.2 (PWD)]
-MACRO {aa}{"Astronomy and Astrophysics"}
-MACRO {aasup}{"Astronomy and Astrophysics, Supplement Series"}
-MACRO {aj}{"Astronomical Journal"}
-MACRO {aph} {"Acta Physica"}
-MACRO {advp} {"Advances in Physics"}
-MACRO {ajp} {"American Journal of Physics"}
-MACRO {ajm} {"American Journal of Mathematics"}
-MACRO {amsci} {"American Scientist"}
-MACRO {anofd} {"Annals of Fluid Dynamics"}
-MACRO {am} {"Annals of Mathematics"}
-MACRO {ap} {"Annals of Physics"}
-MACRO {adp} {"Annalen der Physik"}
-MACRO {ao} {"Applied Optics"}
-MACRO {apl} {"Applied Physics Letters"}
-MACRO {app} {"Astroparticle Physics"}
-MACRO {apj} {"Astrophysical Journal"}
-MACRO {apjsup} {"Astrophysical Journal Supplement"}
-MACRO {apss} {"Astrophysics and Space Science"}
-MACRO {araa} {"Annual Review of Astronomy and Astrophysics"}
-MACRO {baas} {"Bulletin of the American Astronomical Society"}
-MACRO {baps} {"Bulletin of the American Physical Society"}
-MACRO {cmp} {"Communications in Mathematical Physics"}
-MACRO {cpam} {"Communications on Pure and Applied Mathematics"}
-MACRO {cppcf} {"Comments on Plasma Physics and Controlled Fusion"}
-MACRO {cpc} {"Computer Physics Communications"}
-MACRO {cqg} {"Classical and Quantum Gravity"}
-MACRO {cra} {"Comptes Rendus des S{\'e}ances de l'Acad{\'e}mie des Sciences A"}
-MACRO {fed} {"Fusion Engineering and Design"}
-MACRO {ft} {"Fusion Technology"}
-MACRO {grg} {"General Relativity and Gravitation"}
-MACRO {ieeens} {"IEEE Transactions on Nuclear Science"}
-MACRO {ieeeps} {"IEEE Transactions on Plasma Science"}
-MACRO {ijimw} {"International Journal of Infrared and Millimeter Waves"}
-MACRO {ip} {"Infrared Physics"}
-MACRO {irp} {"Infrared Physics"}
-MACRO {jap} {"Journal of Applied Physics"}
-MACRO {jasa} {"Journal of the Acoustical Society of America"}
-MACRO {jcp} {"Journal of Computational Physics"}
-MACRO {jetp} {"Soviet Physics--JETP"}
-MACRO {jfe} {"Journal of Fusion Energy"}
-MACRO {jfm} {"Journal of Fluid Mechanics"}
-MACRO {jmp} {"Journal of Mathematical Physics"}
-MACRO {jne} {"Journal of Nuclear Energy"}
-MACRO {jnec} {"Journal of Nuclear Energy, Part C: Plasma Physics, Accelerators, Thermonuclear Research"}
-MACRO {jnm} {"Journal of Nuclear Materials"}
-MACRO {jpc} {"Journal of Physical Chemistry"}
-MACRO {jpp} {"Journal of Plasma Physics"}
-MACRO {jpsj} {"Journal of the Physical Society of Japan"}
-MACRO {jsi} {"Journal of Scientific Instruments"}
-MACRO {jvst} {"Journal of Vacuum Science and Technology"}
-MACRO {nat} {"Nature"}
-MACRO {nature} {"Nature"}
-MACRO {nedf} {"Nuclear Engineering and Design/Fusion"}
-MACRO {nf} {"Nuclear Fusion"}
-MACRO {nim} {"Nuclear Instruments and Methods"}
-MACRO {nimpr} {"Nuclear Instruments and Methods in Physics Research"}
-MACRO {np} {"Nuclear Physics"}
-MACRO {npb} {"Nuclear Physics B"}
-MACRO {nt/f} {"Nuclear Technology/Fusion"}
-MACRO {npbpc} {"Nuclear Physics B (Proceedings Supplements)"}
-MACRO {inc} {"Il Nuovo Cimento"}
-MACRO {nc} {"Nuovo Cimento"}
-MACRO {pf} {"Physics of Fluids"}
-MACRO {pfa} {"Physics of Fluids A: Fluid Dynamics"}
-MACRO {pfb} {"Physics of Fluids B: Plasma Physics"}
-MACRO {pl} {"Physics Letters"}
-MACRO {pla} {"Physics Letters A"}
-MACRO {plb} {"Physics Letters B"}
-MACRO {prep} {"Physics Reports"}
-MACRO {pnas} {"Proceedings of the National Academy of Sciences of the USA"}
-MACRO {pp} {"Physics of Plasmas"}
-MACRO {ppcf} {"Plasma Physics and Controlled Fusion"}
-MACRO {phitrsl} {"Philosophical Transactions of the Royal Society of London"}
-MACRO {prl} {"Physical Review Letters"}
-MACRO {pr} {"Physical Review"}
-MACRO {physrev} {"Physical Review"}
-MACRO {pra} {"Physical Review A"}
-MACRO {prb} {"Physical Review B"}
-MACRO {prc} {"Physical Review C"}
-MACRO {prd} {"Physical Review D"}
-MACRO {pre} {"Physical Review E"}
-MACRO {ps} {"Physica Scripta"}
-MACRO {procrsl} {"Proceedings of the Royal Society of London"}
-MACRO {rmp} {"Reviews of Modern Physics"}
-MACRO {rsi} {"Review of Scientific Instruments"}
-MACRO {science} {"Science"}
-MACRO {sciam} {"Scientific American"}
-MACRO {sam} {"Studies in Applied Mathematics"}
-MACRO {sjpp} {"Soviet Journal of Plasma Physics"}
-MACRO {spd} {"Soviet Physics--Doklady"}
-MACRO {sptp} {"Soviet Physics--Technical Physics"}
-MACRO {spu} {"Soviet Physics--Uspeki"}
-MACRO {st} {"Sky and Telescope"}
- % End module: physjour.mbs
- %-------------------------------------------------------------------
- % Begin module:
- % \ProvidesFile{geojour.mbs}[2002/07/10 2.0h (PWD)]
-MACRO {aisr} {"Advances in Space Research"}
-MACRO {ag} {"Annales Geophysic\ae"}
-MACRO {anigeo} {"Annali di Geofisica"}
-MACRO {angl} {"Annals of Glaciology"}
-MACRO {andmet} {"Annalen der Meteorologie"}
-MACRO {andgeo} {"Annales de Geophysique"}
-MACRO {andphy} {"Annales de Physique"}
-MACRO {afmgb} {"Archiv f\^^b{u}r Meteorologie, Geophysik und Bioklimatologie"}
-MACRO {ass}{"Astrophysics and Space Science"}
-MACRO {atph} {"Atm\'osphera"}
-MACRO {aao} {"Atmosphere-Ocean"}
-MACRO {atenv} {"Atmospheric Environment"}
-MACRO {aujag} {"Australian Journal of Agricultural Research"}
-MACRO {aumet} {"Australian Meteorological Magazine"}
-MACRO {blmet} {"Boundary-Layer Meteorology"}
-MACRO {bams} {"Bulletin of the American Meteorological Society"}
-MACRO {cch} {"Climatic Change"}
-MACRO {cdyn} {"Climate Dynamics"}
-MACRO {cbul} {"Climatological Bulletin"}
-MACRO {cap} {"Contributions to Atmospheric Physics"}
-MACRO {dsr} {"Deep-Sea Research"}
-MACRO {dhz} {"Deutsche Hydrographische Zeitschrift"}
-MACRO {dao} {"Dynamics of Atmospheres and Oceans"}
-MACRO {eco} {"Ecology"}
-MACRO {empl}{"Earth, Moon and Planets"}
-MACRO {envres} {"Environmental Research"}
-MACRO {envst} {"Environmental Science and Technology"}
-MACRO {ecms} {"Estuarine and Coastal Marine Science"}
-MACRO {expa}{"Experimental Astronomy"}
-MACRO {geoint} {"Geofisica Internationale"}
-MACRO {geopub} {"Geofysiske Publikasjoner"}
-MACRO {geogeo} {"Geologiya i Geofizika"}
-MACRO {gafd} {"Geophysical and Astrophysical Fluid Dynamics"}
-MACRO {gfd} {"Geophysical Fluid Dynamics"}
-MACRO {geomag} {"Geophysical Magazine"}
-MACRO {georl} {"Geophysical Research Letters"}
-MACRO {grl} {"Geophysical Research Letters"}
-MACRO {ga} {"Geophysica"}
-MACRO {gs} {"Geophysics"}
-MACRO {ieeetap} {"IEEE Transactions on Antennas and Propagation"}
-MACRO {ijawp} {"International Journal of Air and Water Pollution"}
-MACRO {ijc} {"International Journal of Climatology"}
-MACRO {ijrs} {"International Journal of Remote Sensing"}
-MACRO {jam} {"Journal of Applied Meteorology"}
-MACRO {jaot} {"Journal of Atmospheric and Oceanic Technology"}
-MACRO {jatp} {"Journal of Atmospheric and Terrestrial Physics"}
-MACRO {jastp} {"Journal of Atmospheric and Solar-Terrestrial Physics"}
-MACRO {jce} {"Journal of Climate"}
-MACRO {jcam} {"Journal of Climate and Applied Meteorology"}
-MACRO {jcm} {"Journal of Climate Meteorology"}
-MACRO {jcy} {"journal of Climatology"}
-MACRO {jgr} {"Journal of Geophysical Research"}
-MACRO {jga} {"Journal of Glaciology"}
-MACRO {jh} {"Journal of Hydrology"}
-MACRO {jmr} {"Journal of Marine Research"}
-MACRO {jmrj} {"Journal of Meteorological Research, Japan"}
-MACRO {jm} {"Journal of Meteorology"}
-MACRO {jpo} {"Journal of Physical Oceanography"}
-MACRO {jra} {"Journal de Recherches Atmospheriques"}
-MACRO {jaes} {"Journal of the Aeronautical Sciences"}
-MACRO {japca} {"Journal of the Air Pollution Control Association"}
-MACRO {jas} {"Journal of the Atmospheric Sciences"}
-MACRO {jmts} {"Journal of the Marine Technology Society"}
-MACRO {jmsj} {"Journal of Meteorological Society of Japan"}
-MACRO {josj} {"Journal of the Oceanographical Society of Japan"}
-MACRO {jwm} {"Journal of Weather Modification"}
-MACRO {lao} {"Limnology and Oceanography"}
-MACRO {mwl} {"Mariners Weather Log"}
-MACRO {mau} {"Mausam"}
-MACRO {meteor} {"``Meteor'' Forschungsergebnisse"}
-MACRO {map} {"Meteorology and Atmospheric Physics"}
-MACRO {metmag} {"Meteorological Magazine"}
-MACRO {metmon} {"Meteorological Monographs"}
-MACRO {metrun} {"Meteorologische Rundschau"}
-MACRO {metzeit} {"Meteorologische Zeitschrift"}
-MACRO {metgid} {"Meteorologiya i Gidrologiya"}
-MACRO {mwr} {"Monthly Weather Review"}
-MACRO {nwd} {"National Weather Digest"}
-MACRO {nzjmfr} {"New Zealand Journal of Marine and Freshwater Research"}
-MACRO {npg} {"Nonlinear Processes in Geophysics"}
-MACRO {om} {"Oceanography and Meteorology"}
-MACRO {ocac} {"Oceanologica Acta"}
-MACRO {oceanus} {"Oceanus"}
-MACRO {paleoc} {"Paleoceanography"}
-MACRO {pce} {"Physics and Chemistry of the Earth"}
-MACRO {pmg} {"Papers in Meteorology and Geophysics"}
-MACRO {ppom} {"Papers in Physical Oceanography and Meteorology"}
-MACRO {physzeit} {"Physikalische Zeitschrift"}
-MACRO {pps} {"Planetary and Space Science"}
-MACRO {pss} {"Planetary and Space Science"}
-MACRO {pag} {"Pure and Applied Geophysics"}
-MACRO {qjrms} {"Quarterly Journal of the Royal Meteorological Society"}
-MACRO {quatres} {"Quaternary Research"}
-MACRO {rsci} {"Radio Science"}
-MACRO {rse} {"Remote Sensing of the Environment"}
-MACRO {rgeo} {"Reviews of Geophysics"}
-MACRO {rgsp} {"Reviews of Geophysics and Space Physics"}
-MACRO {rdgeo} {"Revista de Geofisica"}
-MACRO {revmeta} {"Revista Meteorologica"}
-MACRO {sgp}{"Surveys in Geophysics"}
-MACRO {sp} {"Solar Phys."}
-MACRO {ssr} {"Space Science Review"}
-MACRO {tellus} {"Tellus"}
-MACRO {tac} {"Theoretical and Applied Climatology"}
-MACRO {tagu} {"Transactions, American Geophysical Union (EOS)"}
-MACRO {wrr} {"Water Resources Research"}
-MACRO {weather} {"Weather"}
-MACRO {wafc} {"Weather and Forecasting"}
-MACRO {ww} {"Weatherwise"}
-MACRO {wmob} {"World Meteorological Organization Bulletin"}
-MACRO {zeitmet} {"Zeitschrift f\^^b{u}r Meteorologie"}
- % End module: geojour.mbs
- %-------------------------------------------------------------------
- % Begin module:
- % \ProvidesFile{photjour.mbs}[1999/02/24 2.0b (PWD)]
+FUNCTION {eng.ord}
+{ duplicate$ "1" swap$ *
+  #-2 #1 substring$ "1" =
+     { bbl.th * }
+     { duplicate$ #-1 #1 substring$
+       duplicate$ "1" =
+         { pop$ bbl.st * }
+         { duplicate$ "2" =
+             { pop$ bbl.nd * }
+             { "3" =
+                 { bbl.rd * }
+                 { bbl.th * }
+               if$
+             }
+           if$
+          }
+       if$
+     }
+   if$
+}
 
-MACRO {appopt} {"Applied Optics"}
-MACRO {bell} {"Bell Systems Technical Journal"}
-MACRO {ell} {"Electronics Letters"}
-MACRO {jasp} {"Journal of Applied Spectroscopy"}
-MACRO {jqe} {"IEEE Journal of Quantum Electronics"}
-MACRO {jlwt} {"Journal of Lightwave Technology"}
-MACRO {jmo} {"Journal of Modern Optics"}
-MACRO {josa} {"Journal of the Optical Society of America"}
-MACRO {josaa} {"Journal of the Optical Society of America~A"}
-MACRO {josab} {"Journal of the Optical Society of America~B"}
-MACRO {jdp} {"Journal de Physique"}
-MACRO {oc} {"Optics Communications"}
-MACRO {ol} {"Optics Letters"}
-MACRO {phtl} {"IEEE Photonics Technology Letters"}
-MACRO {pspie} {"Proceedings of the Society for Photo-Optical Instruments Engineers"}
-MACRO {sse} {"Solid-State Electronics"}
-MACRO {sjot} {"Soviet Journal of Optical Technology"}
-MACRO {sjqe} {"Soviet Journal of Quantum Electronics"}
-MACRO {sleb} {"Soviet Physics--Lebedev Institute Reports"}
-MACRO {stph} {"Soviet Physics--Technical Physics"}
-MACRO {stphl} {"Soviet Technical Physics Letters"}
-MACRO {vr} {"Vision Research"}
-MACRO {zph} {"Zeitschrift f\^^b{u}r Physik"}
-MACRO {zphb} {"Zeitschrift f\^^b{u}r Physik~B"}
-MACRO {zphd} {"Zeitschrift f\^^b{u}r Physik~D"}
-
-MACRO {CLEO} {"Conf. on Lasers and Electro-Optics"}
-MACRO {ASSL} {"Advanced Solid State Lasers"}
-MACRO {OSA}  {"Optical Society of America"}
- % End module: photjour.mbs
-%% Copyright 1994-2011 Patrick W Daly
 MACRO {acmcs} {"ACM Computing Surveys"}
 
 MACRO {acta} {"Acta Informatica"}
@@ -610,10 +409,15 @@ FUNCTION {bibinfo.warn}
     }
   if$
 }
-INTEGERS { nameptr namesleft numnames }
-
+FUNCTION {write.url}
+{ url empty$
+    { skip$ }
+    { "\newline\urlprefix\url{" url * "}" * write$ newline$ }
+  if$
+}
 
 STRINGS  { bibinfo}
+INTEGERS { nameptr namesleft numnames }
 
 FUNCTION {format.names}
 { 'bibinfo :=
@@ -719,13 +523,33 @@ FUNCTION {get.bbl.editor}
 FUNCTION {format.editors}
 { editor "editor" format.names duplicate$ empty$ 'skip$
     {
+      "," *
       " " *
       get.bbl.editor
-   "(" swap$ * ")" *
       *
     }
   if$
 }
+FUNCTION {format.isbn}
+{ isbn "isbn" bibinfo.check
+  duplicate$ empty$ 'skip$
+    {
+      new.block
+      "ISBN " swap$ *
+    }
+  if$
+}
+
+FUNCTION {format.issn}
+{ issn "issn" bibinfo.check
+  duplicate$ empty$ 'skip$
+    {
+      new.block
+      "ISSN " swap$ *
+    }
+  if$
+}
+
 FUNCTION {format.note}
 {
  note empty$
@@ -747,9 +571,6 @@ FUNCTION {format.note}
 
 FUNCTION {format.title}
 { title
-  duplicate$ empty$ 'skip$
-    { "t" change.case$ }
-  if$
   "title" bibinfo.check
 }
 FUNCTION {format.full.names}
@@ -760,7 +581,7 @@ FUNCTION {format.full.names}
   numnames 'namesleft :=
     { namesleft #0 > }
     { s nameptr
-      "{vv~}{ll}{, jj}" format.name$
+      "{vv~}{ll}" format.name$
       't :=
       nameptr #1 >
         {
@@ -884,7 +705,8 @@ FUNCTION {n.dashify}
 }
 
 FUNCTION {word.in}
-{ "" }
+{ bbl.in capitalize
+  " " * }
 
 FUNCTION {format.date}
 { year "year" bibinfo.check duplicate$ empty$
@@ -947,10 +769,63 @@ FUNCTION {format.number.series}
     { "" }
   if$
 }
+FUNCTION {is.num}
+{ chr.to.int$
+  duplicate$ "0" chr.to.int$ < not
+  swap$ "9" chr.to.int$ > not and
+}
+
+FUNCTION {extract.num}
+{ duplicate$ 't :=
+  "" 's :=
+  { t empty$ not }
+  { t #1 #1 substring$
+    t #2 global.max$ substring$ 't :=
+    duplicate$ is.num
+      { s swap$ * 's := }
+      { pop$ "" 't := }
+    if$
+  }
+  while$
+  s empty$
+    'skip$
+    { pop$ s }
+  if$
+}
+
+FUNCTION {convert.edition}
+{ extract.num "l" change.case$ 's :=
+  s "first" = s "1" = or
+    { bbl.first 't := }
+    { s "second" = s "2" = or
+        { bbl.second 't := }
+        { s "third" = s "3" = or
+            { bbl.third 't := }
+            { s "fourth" = s "4" = or
+                { bbl.fourth 't := }
+                { s "fifth" = s "5" = or
+                    { bbl.fifth 't := }
+                    { s #1 #1 substring$ is.num
+                        { s eng.ord 't := }
+                        { edition 't := }
+                      if$
+                    }
+                  if$
+                }
+              if$
+            }
+          if$
+        }
+      if$
+    }
+  if$
+  t
+}
 
 FUNCTION {format.edition}
 { edition duplicate$ empty$ 'skip$
     {
+      convert.edition
       output.state mid.sentence =
         { "l" }
         { "t" }
@@ -1155,22 +1030,25 @@ FUNCTION {article}
   format.date "year" output.check
   date.block
   format.title "title" output.check
-  new.sentence
+  new.block
   crossref missing$
     {
       journal
       "journal" bibinfo.check
       emphasize
       "journal" output.check
-      add.blank
       format.vol.num.pages output
     }
-    { format.article.crossref output.nonnull
+    { 
+      format.article.crossref output.nonnull
       format.pages output
     }
   if$
+  format.issn output
+  new.block
   format.note output
   fin.entry
+  write.url
 }
 FUNCTION {book}
 { output.bibitem
@@ -1190,18 +1068,22 @@ FUNCTION {book}
   format.btitle "title" output.check
   crossref missing$
     { format.bvolume output
-  new.sentence
+      new.block
       format.number.series output
+      new.sentence
       format.publisher.address output
     }
     {
-  new.sentence
+      new.block
       format.book.crossref output.nonnull
     }
   if$
   format.edition output
+  format.isbn output
+  new.block
   format.note output
   fin.entry
+  write.url
 }
 FUNCTION {booklet}
 { output.bibitem
@@ -1210,11 +1092,14 @@ FUNCTION {booklet}
   format.date "year" output.check
   date.block
   format.title "title" output.check
-  new.sentence
+  new.block
   howpublished "howpublished" bibinfo.check output
   address "address" bibinfo.check output
+  format.isbn output
+  new.block
   format.note output
   fin.entry
+  write.url
 }
 
 FUNCTION {inbook}
@@ -1237,19 +1122,26 @@ FUNCTION {inbook}
     {
       format.bvolume output
       format.chapter.pages "chapter and pages" output.check
-  new.sentence
+      new.block
       format.number.series output
+      new.sentence
       format.publisher.address output
     }
     {
       format.chapter.pages "chapter and pages" output.check
-  new.sentence
+      new.block
       format.book.crossref output.nonnull
     }
   if$
   format.edition output
+  crossref missing$
+    { format.isbn output }
+    'skip$
+  if$
+  new.block
   format.note output
   fin.entry
+  write.url
 }
 
 FUNCTION {incollection}
@@ -1259,21 +1151,25 @@ FUNCTION {incollection}
   format.date "year" output.check
   date.block
   format.title "title" output.check
-  new.sentence
+  new.block
   crossref missing$
     { format.in.ed.booktitle "booktitle" output.check
       format.bvolume output
       format.number.series output
       format.chapter.pages output
+      new.sentence
       format.publisher.address output
       format.edition output
+      format.isbn output
     }
     { format.incoll.inproc.crossref output.nonnull
       format.chapter.pages output
     }
   if$
+  new.block
   format.note output
   fin.entry
+  write.url
 }
 FUNCTION {inproceedings}
 { output.bibitem
@@ -1282,25 +1178,30 @@ FUNCTION {inproceedings}
   format.date "year" output.check
   date.block
   format.title "title" output.check
-  new.sentence
+  new.block
   crossref missing$
     { format.in.ed.booktitle "booktitle" output.check
       format.bvolume output
       format.number.series output
       format.pages output
+      new.sentence
       publisher empty$
         { format.organization.address output }
         { organization "organization" bibinfo.check output
           format.publisher.address output
         }
       if$
+      format.isbn output
+      format.issn output
     }
     { format.incoll.inproc.crossref output.nonnull
       format.pages output
     }
   if$
+  new.block
   format.note output
   fin.entry
+  write.url
 }
 FUNCTION {conference} { inproceedings }
 FUNCTION {manual}
@@ -1310,12 +1211,14 @@ FUNCTION {manual}
   format.date "year" output.check
   date.block
   format.btitle "title" output.check
-  new.sentence
+  organization address new.block.checkb
   organization "organization" bibinfo.check output
   address "address" bibinfo.check output
   format.edition output
+  new.block
   format.note output
   fin.entry
+  write.url
 }
 
 FUNCTION {mastersthesis}
@@ -1326,12 +1229,14 @@ FUNCTION {mastersthesis}
   date.block
   format.btitle
   "title" output.check
-  new.sentence
+  new.block
   bbl.mthesis format.thesis.type output.nonnull
   school "school" bibinfo.warn output
   address "address" bibinfo.check output
+  new.block
   format.note output
   fin.entry
+  write.url
 }
 
 FUNCTION {misc}
@@ -1341,10 +1246,12 @@ FUNCTION {misc}
   format.date "year" output.check
   date.block
   format.title output
-  new.sentence
+  new.block
   howpublished "howpublished" bibinfo.check output
+  new.block
   format.note output
   fin.entry
+  write.url
 }
 FUNCTION {phdthesis}
 { output.bibitem
@@ -1354,12 +1261,14 @@ FUNCTION {phdthesis}
   date.block
   format.btitle
   "title" output.check
-  new.sentence
+  new.block
   bbl.phdthesis format.thesis.type output.nonnull
   school "school" bibinfo.warn output
   address "address" bibinfo.check output
+  new.block
   format.note output
   fin.entry
+  write.url
 }
 
 FUNCTION {proceedings}
@@ -1371,14 +1280,19 @@ FUNCTION {proceedings}
   format.btitle "title" output.check
   format.bvolume output
   format.number.series output
+  new.sentence
   publisher empty$
     { format.organization.address output }
     { organization "organization" bibinfo.check output
       format.publisher.address output
     }
   if$
+  format.isbn output
+  format.issn output
+  new.block
   format.note output
   fin.entry
+  write.url
 }
 
 FUNCTION {techreport}
@@ -1389,12 +1303,14 @@ FUNCTION {techreport}
   date.block
   format.title
   "title" output.check
-  new.sentence
+  new.block
   format.tr.number output.nonnull
   institution "institution" bibinfo.warn output
   address "address" bibinfo.check output
+  new.block
   format.note output
   fin.entry
+  write.url
 }
 
 FUNCTION {unpublished}
@@ -1404,8 +1320,10 @@ FUNCTION {unpublished}
   format.date "year" output.check
   date.block
   format.title "title" output.check
+  new.block
   format.note "note" output.check
   fin.entry
+  write.url
 }
 
 FUNCTION {default.type} { misc }
@@ -1426,7 +1344,7 @@ FUNCTION {chop.word}
 FUNCTION {format.lab.names}
 { 's :=
   "" 't :=
-  s #1 "{vv~}{ll}{, jj}" format.name$
+  s #1 "{vv~}{ll}" format.name$
   s num.names$ duplicate$
   #2 >
     { pop$
@@ -1520,16 +1438,15 @@ FUNCTION {sort.format.names}
   numnames 'namesleft :=
     { namesleft #0 > }
     { s nameptr
-      "{vv{ } }{ll{ }}{  f{ }}{  jj{ }}"
+      "{ll{ }}{  ff{ }}{  jj{ }}"
       format.name$ 't :=
       nameptr #1 >
         {
           "   "  *
           namesleft #1 = t "others" = and
-            { "zzzzz" 't := }
-            'skip$
+            { "zzzzz" * }
+            { t sortify * }
           if$
-          t sortify *
         }
         { t sortify * }
       if$
@@ -1620,30 +1537,17 @@ FUNCTION {presort}
 ITERATE {presort}
 SORT
 STRINGS { last.label next.extra }
-INTEGERS { last.extra.num last.extra.num.extended last.extra.num.blank number.label }
+INTEGERS { last.extra.num number.label }
 FUNCTION {initialize.extra.label.stuff}
 { #0 int.to.chr$ 'last.label :=
   "" 'next.extra :=
   #0 'last.extra.num :=
-  "a" chr.to.int$ #1 - 'last.extra.num.blank :=
-  last.extra.num.blank 'last.extra.num.extended :=
   #0 'number.label :=
 }
 FUNCTION {forward.pass}
 { last.label label =
     { last.extra.num #1 + 'last.extra.num :=
-      last.extra.num "z" chr.to.int$ >
-       { "a" chr.to.int$ 'last.extra.num :=
-         last.extra.num.extended #1 + 'last.extra.num.extended :=
-       }
-       'skip$
-      if$
-      last.extra.num.extended last.extra.num.blank >
-        { last.extra.num.extended int.to.chr$
-          last.extra.num int.to.chr$
-          * 'extra.label := }
-        { last.extra.num int.to.chr$ 'extra.label := }
-      if$
+      last.extra.num int.to.chr$ 'extra.label :=
     }
     { "a" chr.to.int$ 'last.extra.num :=
       "" 'extra.label :=
@@ -1694,6 +1598,10 @@ FUNCTION {begin.bib}
   write$ newline$
   "\providecommand{\natexlab}[1]{#1}"
   write$ newline$
+  "\providecommand{\url}[1]{\texttt{#1}}"
+  write$ newline$
+  "\providecommand{\urlprefix}{URL }"
+  write$ newline$
 }
 EXECUTE {begin.bib}
 EXECUTE {init.state.consts}
@@ -1705,4 +1613,4 @@ FUNCTION {end.bib}
 EXECUTE {end.bib}
 %% End of customized bst file
 %%
-%% End of file `functional_ecol.bst'.
+%% End of file `JAE.bst'.

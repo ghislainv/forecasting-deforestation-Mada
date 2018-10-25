@@ -16,15 +16,29 @@ biblio-style: bib/journal-of-applied-ecology.csl
 ```{r setup, include=FALSE}
 library(knitr)
 knitr::opts_chunk$set(
-	echo = TRUE,
-	message = FALSE,
-	warning = FALSE,
-	cache = TRUE
+	echo=TRUE,
+	message=FALSE,
+	warning=FALSE,
+	cache=TRUE
 )
 knitr::opts_knit$set(
-  root.dir = "../" 
+  root.dir=rprojroot::find_rstudio_root_file()
 )
 ```
+
+## Introduction
+
+```{r causes, echo=FALSE, fig.cap="(ref:cap-causes)", out.width="\\textwidth"}
+knitr::include_graphics("training/figures/causes.jpg")
+```
+
+Figure caption: **Main causes of deforestation in central Menabe.** **a-a'**: _Slash-and-burn agriculture ("hatsake") for peanut crop._ Peanut (a') is cultivated as a cash crop. Part of the production is at the destination of the national market but most of it is exported outside Madagascar, mainly for the Chinese market. **b-b'**: _Slash-and-burn agriculture for maize crop._ maize (b') is cultivated for auto-consumption and as a cash crop. The production of maize is at the destination of the national market and is used in particular to brew the national beers. **c-c'**: _Cyclone followed by uncontrolled fires._ Cyclone _"Fanele"_ (2009) caused tree mortality and accumulation of wood fuel on the ground. As a consequence, uncontrolled fires set on nearby pastures (c') spread over large areas of forest after 2009. **d-d'**: _Illegal logging._ Timbers are used for house and boat construction.
+
+```{r cc-license, echo=FALSE}
+knitr::include_graphics("training/figures/by-sa.png")
+```
+
+This tutorial is licensed under the [Creative Commons Attribution-ShareAlike 4.0 International License](http://creativecommons.org/licenses/by-sa/4.0/).
 
 ## Computing environment
 
@@ -91,7 +105,7 @@ source("R/dfp_plot.R")
 
 ### Importing Python modules in R
 
-Specify the Python version to use.
+Specify the Python version to use and check that it is the right one.
 
 ```{r}
 use_python("/usr/bin/python3.5")
@@ -112,15 +126,21 @@ smf <- import("statsmodels.formula.api")
 
 ### Downloading the geospatial data
 
-To model the spatial probability of deforestation, we need a map of the past deforestation and maps of potential explicative environmental variables. Environmental variables can be derived from topography (altitude and slope), accessibility (distance to roads, towns, and forest edge), deforestation history (distance to previous deforestation) or landscape policy (location inside a protected area) for example. In our example, we use the following variables :
+To model the spatial probability of deforestation, we need a map of the past deforestation and maps of potential explicative environmental variables. Environmental variables can be derived from topography (altitude and slope), accessibility (distance to roads, towns, and forest edge), deforestation history (distance to previous deforestation) or landscape policy (protected area network) for example. In our example, we use the following variables :
 
-
+```{r variables}
+library(kableExtra)
+tab1 <- read.table("training/tables/variables.txt",sep=",",header=TRUE)
+names(tab1) <- c("Product","Source","Variable derived","Unit","Resolution (m)")
+# Kable
+knitr::kable(tab1, linesep="") %>%
+  kable_styling(bootstrap_options = c("striped"))
+```
 
 1. <http://bioscenemada.cirad.fr>, deforestation maps from @Vieilledent2018
 2. <http://srtm.csi.cgiar.org>, SRTM 90m Digital Elevation Database v4.1
 3. <http://www.geofabrik.de>, data extracts from the OpenStreetMap project for Madagascar,
 4. <http://rebioma.net>, SAPM ("Système des Aires Protégées à Madagascar"), 20/12/2010 version
-
 
 
 ```{r download_data}
@@ -163,6 +183,12 @@ if (!file.exists("data/mada/mada38s.shp")) {
 
 ### Sampling points
 
+We use the function `.sample()` from the `forestatrisk` module to sample 10,000 points (pixel centers) in the deforested areas and in the remaining forest (20,000 points in total). The `input_forest_raster` argument defines the path to the forest raster including the deforested pixels (with value=0) and the remaining forest pixels (value=1) after a given period of time. The random seed can be set with argument `Seed` to reproduce the data of the random sampling.
+
+The `.sample()` function also extracts information from environmental variables for each sampled point. Sampling is done by block to allow the computation on large study areas (e.g. country or continental scale) with a fine spatial resolution (e.g. 30m). The `var_dir` argument indicates the directory including all the environmental raster files (they must be GeoTIFF files with extension `.tif`) that we want to test.
+
+The `.sample()` function identifies the spatial cell for each sample point (sample point are grouped within a spatial cell). Spatial cells and grouped observations are used to estimate the spatial autocorrelation of the deforestation process. The `csize` argument define the width (in km) of the square spatial cells. Each spatial cell will be attributed a parameter. To avoid estimating too many parameters, width of the square spatial cells must be sufficiently large. Both points sampling and extraction of environmental data are done by block to avoid memory problems for big datasets.
+
 ```{r sampling}
 # Make output directory
 if (!dir.exists("output")) {
@@ -188,7 +214,56 @@ head(data_train)
 
 ## Deforestation model
 
+We propose to use the **Binomial iCAR** model [@Vieilledent2014] to estimate the deforestation probability of a pixel given a set of environmental variables. The Binomial iCAR model is a linear Binomial logistic regression model including an intrinsic Conditional Autoregressive (iCAR) process to account for the spatial autocorrelation of the observations. Parameter inference is done in a hierarchical Bayesian framework. The `.model_binomial_iCAR()` function from the `forestatrisk` module includes a Metropolis-within-Gibbs algorithm written in pure C code to reduce computation time.
+
+![Bayes](figures/Bayes.jpg)
+
+**Figure caption:** Parameter inference is done in a hierarchical Bayesian framework, which relies on the [Bayes' theorem](https://en.wikipedia.org/wiki/Bayes'_theorem) named after [Reverend Thomas Bayes](https://en.wikipedia.org/wiki/Thomas_Bayes). Each parameter has a prior and an approximated posterior probability distribution from which we can compute the mean, standard deviation, credible intervals at 95%, etc.
+
+For the deforestation process it is _**very important to take into account the spatial autocorrelation of the process**_ with spatial random effects. Indeed, the selected fixed environmental variables are not able to fully explain the spatial variability of the deforestation process, especially when working at large geographical scales, such as the national or continental scale. Spatial random effects allow estimating a higher/lower probability of deforestation in a particular region (associated to **unmeasurable** or **unknow** factors) that is different from the mean probability of deforestation derived from the environmental factors included in the model. The Binomial iCAR model can be described as follow:
+
+**Ecological process**
+
+\begin{equation}
+y_i \sim \mathcal{B}inomial(\theta_i,t_i) \\
+\text{logit}(\theta_i) = X_i \beta + \rho_{j(i)}
+\end{equation}
+
+$y_i$: random variable for the deforestation process (0 if no deforestation, 1 if deforestation)
+
+$\theta_i$: probability of deforestation
+
+$t_i$: number of trials (always 1 in our example)
+
+$X_i$: vector of values for environmental explicative variables
+
+$\beta$: vector of fixed effect parameters
+
+$\rho_j$: spatial random effect
+  
+$j(i)$: index of the spatial entity for observation $i$.
+  
+**Spatial autocorrelation**
+  
+The spatial autocorrelation is modelled with an intrinsic conditional autoregressive (iCAR) process:
+
+\begin{equation}
+\rho_j \sim \mathcal{N}ormal(\mu_j,V_{\rho} / n_j)
+\end{equation}
+
+$\mu_j$: mean of $\rho_{j'}$ in the neighborhood of $j$.
+  
+$V_{\rho}$: variance of the spatial random effects.
+  
+$n_j$: number of neighbors for spatial entity $j$.
+
+![iCAR process](figures/iCAR.png)
+
+**Figure caption:** Representation of the neighborhood for the intrinsic conditional autoregressive (iCAR) process. Target spatial cell $j$ has 8 neighbors in this case. Several observations (black points, equivalent to pixel centers in our case) can be located in each spatial cell. Deforestation probability in one spatial cell $j$ depends on deforestation probability in neighboring cells.
+
 ### Spatial cells
+
+Before running the model, we add a column indicating the number of trials for each observation (1 in our case as we are considering a Bernoulli process). We then remove any observation with non-available data (NA) from the data-set. We also compute the number of neighbors (`nneigh`) and the neighbor identifiers (`adj`) for each spatial cell using function `.cellneigh` from the `forestatrisk` module.
 
 ```{r spatial_cells}
 # Spatial cells for spatial-autocorrelation
@@ -210,6 +285,8 @@ data_train$cell <- cell_rank
 ```
 
 ### Model formula
+
+A model formula must also be defined to specify the explicative variables we want to include in the model. The formula allows specifying some variable transformations (such as standardization in our case). See the [`patsy`](https://patsy.readthedocs.io/en/latest/) module for more information. In our model, we included the following variables: location inside a protected area, altitude, distance to past deforestation (with a degree two polynomial), distance to forest edge, distance to nearest road and distance to nearest town. The formula must end with the name of the variable indicating the spatial cell for each observation (`cell` in our case).
 
 ```{r formula}
 # Formula
@@ -242,6 +319,8 @@ mod_binomial_iCAR <- far$model_binomial_iCAR(
 
 ### Model summary
 
+Once the model has been fitted, we can print a summary of the model showing the parameter estimates. The 95% credible intervals obtained from the posterior distribution of each parameter, except distance to nearest town (`dist_town`), do not include zero, indicating that parameters are significantly different from zero. The variance of the spatial random effects (`Vrho`) is given together with the deviance value, which can be used to compare different statistical models (lower deviance is better). Looking at the parameter estimates, we can see that the deforestation probability is much lower inside protected areas and that deforestation probability decreases with altitude, slope, distance to past deforestation, forest edge, roads and towns. Parameter values are then coherent regarding the deforestation process and easy to interpret.
+
 ```{r}
 sink(file="output/summary_mod_binomial_iCAR.txt")
 print(mod_binomial_iCAR)
@@ -250,6 +329,8 @@ print(mod_binomial_iCAR)
 ```
 
 ### Plot traces and posteriors
+
+To check for the convergence of the Markov chain Monte Carlo (MCMC), we can plot the traces and the posterior distributions of the estimated parameters using method `.plot()` associated to the `hSDM_binomial_iCAR` class defined in the `deforestprob` module. This method returns the figures showing the traces and posterior distributions.
 
 ```{r plot_with_py, echo=FALSE}
 traces_fig <- mod_binomial_iCAR$plot(output_file="output/mcmc.pdf",
@@ -264,9 +345,11 @@ mcmc <- as.mcmc(mod_binomial_iCAR$mcmc)
 plot(mcmc[,c(1:3,10,11)])
 ```
 
-## Predicting spatial probability of deforestation
+## Forecasting deforestation
 
 ### Resampling the spatial random effects
+
+We use the model to predict the spatial probability of deforestation at the national scale for Madagascar. Before, doing so, we smooth the spatial random effects which have been estimated at a coarse resolution (10km in our example). To do so, we use the function `.resample_rho()` from the `deforestprob` module to resample the results at a finer resolution using a bilinear interpolation. The function writes a raster file to the disk with a resolution of the raster specified in the argument `input_raster` of the function (1km in our case). The function `.resample_rho()` returns a figure of the spatial random effects that can be plotted.
 
 ```{r rho, fig.height=7, message=FALSE, warning=FALSE}
 # Get the spatial random effects
@@ -290,6 +373,47 @@ rho_plot(r.rho_orig, mada, output_file="output/rho_orig_ggplot.png",
          quantiles_legend=c(0.025,0.975),width=4.5, height=8)
 rho_plot(r.rho, mada, output_file="output/rho_ggplot.png",
          quantiles_legend=c(0.025,0.975),width=4.5, height=8)
+
+```
+
+### Computing spatial probability of deforestation
+
+The `.predict_raster_binomial_iCAR()` function of the `forestatrisk` module can be used to predict the spatial probability of deforestation from an **hSDM_binomial_iCAR** model (i.e. an object of class `hSDM_binomial_iCAR`). The function writes a raster of predictions to the disk. The prediction is done by block to avoid memory problems for big datasets. Functions will return NA for pixels with no forest or for pixels with missing environmental variables.
+
+```{r compute_predictions}
+far$predict_raster_binomial_iCAR(mod_binomial_iCAR, var_dir="data/model",
+                                 input_cell_raster="output/rho.tif",
+                                 input_forest_raster="data/model/fordefor2010.tif",
+                                 output_file="output/pred_binomial_iCAR.tif",
+                                 blk_rows=128L)
+
+```
+
+The raster of predictions can then be plotted.
+
+```{r plot_predictions}
+far$plot$prob("output/pred_binomial_iCAR.tif",output_file="output/pred_binomial_iCAR.png")
+
+```
+
+### Predicting future forest cover
+
+Given the spatial probability of deforestation and the number of hectares that should be deforested, we can predict the future forest cover using function `.deforest()` from the `forestatrisk` package. The number of hectares are converted into number of pixels to be deforested. Pixels with the highest probability of deforestation are deforested first. The function computes a probability threshold above which pixels are deforested.
+
+In our example, we consider an annual deforestation of roughly 100,000 ha for Madagascar. Considering the period 2010-2050, this would correspond to 4 Mha of deforestation. This number can of course be more precise and refined considering various deforestation scenarios (demographic growth, economic development, etc.).
+
+```{r compute_future_forest_cover}
+deforest <- far$deforest(input_raster="output/pred_binomial_iCAR.tif",
+                         hectares=4000000,
+                         output_file="output/forest_cover_2050.tif",
+                         blk_rows=128L)
+
+```
+
+We can plot the predicted future forest cover in 2050. The red areas represent the deforestation on the period 2010-2050. The green areas represent the remaining forest in 2050. Most of the remaining forest in 2050 are inside the protected areas or located in remote areas, at high altitudes and far from roads and big cities (for example in the Tsaratanana mountain region and around the Masoala peninsula, north-east Madagascar).
+
+```{r plot_future_forest_cover}
+far$plot$fcc("output/forest_cover_2050.tif",output_file="output/forest_cover_2050.png")
 
 ```
 
