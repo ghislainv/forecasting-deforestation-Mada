@@ -37,7 +37,7 @@ rho_plot <- function(input_raster, input_vector, output_file, quantiles_legend=c
 	# Save plot
 	ggsave(output_file, ...)
 	# Return message an plot
-	cat(glue("Results plotted to \"{output_file}\""))
+	cat(glue("Results plotted to \"{output_file}\"\n"))
 	return(p)
 }
 

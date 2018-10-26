@@ -1,7 +1,7 @@
 ---
 title: "Modelling and forecasting deforestation"
 author: "Ghislain Vieilledent"
-date: "22 octobre 2018"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
 output:
   html_notebook:
     highlight: tango
@@ -19,8 +19,7 @@ knitr::opts_chunk$set(
 	echo=TRUE,
 	message=FALSE,
 	warning=FALSE,
-	cache=TRUE,
-	fig.align="center"
+	cache=FALSE
 )
 knitr::opts_knit$set(
   root.dir=rprojroot::find_rstudio_root_file()
@@ -99,7 +98,9 @@ require(broom)
 require(ggplot2)
 require(rasterVis)
 require(rgdal)
+```
 
+```{r source_R}
 # Source R plotting functions
 source("R/dfp_plot.R")
 ```
@@ -121,6 +122,90 @@ patsy <- import("patsy")
 sm <- import("statsmodels.api")
 smf <- import("statsmodels.formula.api")
 
+```
+
+### R/Python intro
+
+#### R
+
+##### Some links
+
+- <https://www.rstudio.com/online-learning/#r-programming>
+- <https://cran.r-project.org/doc/contrib/Paradis-rdebuts_en.pdf> (also in French: _fr.pdf)
+- Cheat sheets: <https://www.rstudio.com/resources/cheatsheets>
+
+##### Some exercises
+
+```{r R_exercises}
+a = c(20,5,6,2,9,12)
+b = 1
+c = a + b
+print(c)
+```
+
+
+##### Simple regression
+
+```{r R_regression}
+# Generating data
+nobs <- 100
+x.seq <- runif(n=nobs,min=0,max=100)
+a.target <- 2
+b.target <- 2
+sigma2.target <- 300
+y.seq <- a.target + b.target*x.seq +
+         rnorm(n=nobs,mean=0,sd=sqrt(sigma2.target))
+
+# Data-set
+Data <- as.data.frame(cbind(y.seq,x.seq))
+
+# Plot
+plot(x.seq,y.seq)
+
+# Estimation
+M <- lm(y.seq~x.seq,data=Data)
+summary(M)
+M$coefficients
+var(M$residuals)
+M$df
+
+# Graphics 
+x.pred <- seq(from=0,to=100,length.out=100) # We will predict y for 100 values of x
+X.pred <- as.data.frame(x.pred)
+names(X.pred) <- "x.seq"
+Y.pred <- predict.lm(M,X.pred,interval="confidence",
+                     type="response")
+
+plot(x.seq,y.seq,col=grey(0.7),
+     xlab="X",
+     ylab="Y",
+     main="Simple linear regression") # Row data
+
+# Confidence envelops for predictive posterior
+lines(x.pred,Y.pred[,1],col="red",lwd=3)
+lines(x.pred,Y.pred[,2],col="blue",lwd=2,lty=2)
+lines(x.pred,Y.pred[,3],col="blue",lwd=2,lty=2)
+
+```
+
+#### Python
+
+##### Some links
+
+- <https://www.python.org/about/gettingstarted>
+- <https://www.pythonsheets.com>
+
+##### Some exercises
+
+You can execute Python code within a R notebooks.
+
+```{python}
+import numpy as np
+a = np.array([20,5,6,2,9,12])
+b = 1
+c = a + b
+print(type(c))
+print(c)
 ```
 
 ## Preparing the data-set
@@ -182,6 +267,19 @@ if (!file.exists("data/mada/mada38s.shp")) {
 
 ```
 
+In our example, `fordefor2010.tif` is a forest raster at 30m for the year 2010 considering the deforestation on the period 2000-2010 in Madagascar. We can plot this raster and zoom on a region with function `.plot.forest()` in the `forestatrisk` package to see the deforestation data. The remaining forest appears in green and the deforested areas appear in red.
+
+```{r plot_fcc}
+# Plot forest cover change 2000-2010
+fig <- far$plot$fcc(input_fcc_raster="data/model/fordefor2010.tif",
+             output_file="output/fcc.png",
+             col=c(255,0,0,255),  # rgba color for deforestation
+             figsize=c(5,5),
+             dpi=150,
+             zoom=c(340000,412000,7420000,7500000))
+knitr::include_graphics("output/fcc.png")
+```
+
 ### Sampling points
 
 We use the function `.sample()` from the `forestatrisk` module to sample 10,000 points (pixel centers) in the deforested areas and in the remaining forest (20,000 points in total). The `input_forest_raster` argument defines the path to the forest raster including the deforested pixels (with value=0) and the remaining forest pixels (value=1) after a given period of time. The random seed can be set with argument `Seed` to reproduce the data of the random sampling.
@@ -212,6 +310,56 @@ data_valid <- samp[-train,] %>% dplyr::filter(complete.cases(.))
 head(data_train)
 
 ```
+
+Sampled observations can be plotted using function `.plot.obs()` from the deforestprob module. Dark red dots indicate deforestation observations and dark green dots indicate forest observations.
+
+```{r plot_sample}
+# Plot sample points
+fig <- far$plot$obs(sample=data_train,
+             name_forest_var="fordefor2010",
+             input_fcc_raster="data/model/fordefor2010.tif",
+             output_file="output/obs.png",
+             zoom=c(340000,412000,7420000,7500000),
+             figsize=c(5,5),#c(11.69,8.27),
+             s=5,dpi=300)
+knitr::include_graphics("output/obs.png")
+```
+
+
+### Descriptive statistics
+
+Before modelling the deforestation, it is important to look at the relationship between environmental variables and deforestation. Using formulas from the [`patsy`](https://github.com/pydata/patsy) Python module, we can specify the relationships that we want to look at. In the example below, we plot the relationships between some continuous environmental variables and the probability of deforestation using function `.plot.correlation()` from the `forestatrisk` package. Note that -1 must be set at the end of the formula. The function `.correlation()` returns a serie of graphics that can be analyzed to choose the right relationship for each continuous variable (linear or polynomial for example).
+
+```{r correlations}
+# Descriptive statistics
+
+# Model formulas
+formula_1 <- paste0("fordefor2010 ~ dist_road + dist_town + dist_defor +",
+                    "dist_river + dist_edge + altitude + slope + aspect - 1")
+# Standardized variables (mean=0, std=1)
+formula_2 <- paste0("fordefor2010 ~ scale(dist_road) + scale(dist_town) +",
+                    "scale(dist_defor) + scale(dist_river) + scale(dist_edge) +",
+                    "scale(altitude) + scale(slope) + scale(aspect) - 1")
+formulas <- c(formula_1, formula_2)
+
+# List to store figures
+corr_fig <- list()
+
+# Loop on formulas
+for (f in 1:length(formulas)) {
+    # Output file
+    of <- glue("output/correlation_{f}.pdf")
+    # Data
+    dmat <- patsy$dmatrices(formulas[f], data=data_train, eval_env=-1L,
+                                  return_type="dataframe")
+    # Plots
+    fig <- far$plot$correlation(y=dmat[[1]],data=dmat[[2]],
+                         plots_per_page=3L,figsize=c(7,8),
+                         dpi=100L,output_file=of)
+}
+```
+
+In this example (see pdf files produced), we can see that a linear model should be sufficient to represent the relationship between the probability of deforestation and the standardized distance to the nearest road or town. On the contrary, it could be interesting to fit a polynomial model for the the standardized distance to previous deforestation (`dist_defor` variable) for which the relationship seems non-linear. Several models can be fitted and compared to see if a second-order or third-order polynomial relationship is justified.
 
 ## Deforestation model
 
@@ -362,16 +510,16 @@ rho <- rep(-9999,ncell)  # -9999 will be considered as nodata
 rho[cell_in+1] <- mod_binomial_iCAR$rho
 
 # Resample them
-far$resample_rho(rho=r_to_py(rho), input_raster="data/model/fordefor2010.tif",
+fig <- far$resample_rho(rho=r_to_py(rho), input_raster="data/model/fordefor2010.tif",
                  output_file="output/rho.tif",
                  csize_orig=10L, csize_new=1L)
 
 # Plot random effects
-far$plot$rho("output/rho_orig.tif",output_file="output/rho_orig.png")
-far$plot$rho("output/rho.tif",output_file="output/rho.png")
+fig <- far$plot$rho("output/rho_orig.tif",output_file="output/rho_orig.png")
+fig <- far$plot$rho("output/rho.tif",output_file="output/rho.png")
 
 # Plot with R
-mada <- rgdal::readOGR(dsn="data/mada",layer="mada38s")
+mada <- rgdal::readOGR(dsn="data/mada",layer="mada38s", verbose=FALSE)
 r.rho_orig <- raster("output/rho_orig.tif")
 r.rho <- raster("output/rho.tif")
 rho_plot(r.rho_orig, mada, output_file="output/rho_orig_ggplot.png",
@@ -397,8 +545,8 @@ far$predict_raster_binomial_iCAR(mod_binomial_iCAR, var_dir="data/model",
 The raster of predictions can then be plotted.
 
 ```{r plot_predictions}
-far$plot$prob("output/pred_binomial_iCAR.tif",output_file="output/pred_binomial_iCAR.png")
-
+fig <- far$plot$prob("output/pred_binomial_iCAR.tif",output_file="output/pred_binomial_iCAR.png")
+knitr::include_graphics("output/pred_binomial_iCAR.png")
 ```
 
 ### Predicting future forest cover
@@ -412,14 +560,13 @@ deforest <- far$deforest(input_raster="output/pred_binomial_iCAR.tif",
                          hectares=4000000,
                          output_file="output/forest_cover_2050.tif",
                          blk_rows=128L)
-
 ```
 
 We can plot the predicted future forest cover in 2050. The red areas represent the deforestation on the period 2010-2050. The green areas represent the remaining forest in 2050. Most of the remaining forest in 2050 are inside the protected areas or located in remote areas, at high altitudes and far from roads and big cities (for example in the Tsaratanana mountain region and around the Masoala peninsula, north-east Madagascar).
 
-```{r plot_future_forest_cover}
-far$plot$fcc("output/forest_cover_2050.tif",output_file="output/forest_cover_2050.png")
-
+```{r plot_future_forest_cover, fig.height=10}
+fig <- far$plot$fcc("output/forest_cover_2050.tif",output_file="output/forest_cover_2050.png")
+knitr::include_graphics("output/forest_cover_2050.png")
 ```
 
 ## References
