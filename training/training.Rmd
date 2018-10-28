@@ -96,8 +96,10 @@ require(curl)
 require(dplyr)
 require(broom)
 require(ggplot2)
+require(raster)
 require(rasterVis)
 require(rgdal)
+require(leaflet)
 ```
 
 ```{r source_R}
@@ -545,7 +547,9 @@ far$predict_raster_binomial_iCAR(mod_binomial_iCAR, var_dir="data/model",
 The raster of predictions can then be plotted.
 
 ```{r plot_predictions}
-fig <- far$plot$prob("output/pred_binomial_iCAR.tif",output_file="output/pred_binomial_iCAR.png")
+fig <- far$plot$prob("output/pred_binomial_iCAR.tif",
+                     output_file="output/pred_binomial_iCAR.png",
+                     figsize=c(4,4))
 knitr::include_graphics("output/pred_binomial_iCAR.png")
 ```
 
@@ -562,11 +566,33 @@ deforest <- far$deforest(input_raster="output/pred_binomial_iCAR.tif",
                          blk_rows=128L)
 ```
 
-We can plot the predicted future forest cover in 2050. The red areas represent the deforestation on the period 2010-2050. The green areas represent the remaining forest in 2050. Most of the remaining forest in 2050 are inside the protected areas or located in remote areas, at high altitudes and far from roads and big cities (for example in the Tsaratanana mountain region and around the Masoala peninsula, north-east Madagascar).
+We can plot the predicted future forest cover in 2050 with [leaflet](http://rstudio.github.io/leaflet/). We first reproject the raster to WGS 84 / World Mercator projection ([EPSG:3857](http://spatialreference.org/ref/sr-org/7483/)) and we resample the map at 250 m using function `gdalwarp` from `GDAL` to obtain a lower resolution raster that can be transformed into a lower size image that can be plotted with leaflet.
 
-```{r plot_future_forest_cover, fig.height=10}
-fig <- far$plot$fcc("output/forest_cover_2050.tif",output_file="output/forest_cover_2050.png")
-knitr::include_graphics("output/forest_cover_2050.png")
+```{bash}
+gdalwarp -overwrite -s_srs EPSG:32738 -t_srs EPSG:3857 -tr 250 250 \
+         -ot Byte -r near -co "COMPRESS=LZW" -co "PREDICTOR=2" -co "BIGTIFF=YES" \
+         output/forest_cover_2050.tif output/forest_cover_2050_epsg3857_ov32.tif
+```
+
+We also set the color of the map and the extent of the view for leaflet.
+
+```{r}
+# Colors and extent view for leaflet
+r <- raster("output/forest_cover_2050_epsg3857_ov32.tif")
+pal <- colorFactor(c("red", "darkgreen"), c(0,1), na.color = "transparent")
+r1 <- raster(nrows=1,ncols=1,ext=extent(340000,412000,7420000,7500000),crs=CRS("+init=epsg:32738"))
+r2 <- projectExtent(r1, crs=CRS("+init=epsg:4326"))
+ext2 <- extent(r2)
+```
+
+The red areas represent the deforestation on the period 2010-2050. The green areas represent the remaining forest in 2050. Most of the remaining forest in 2050 are inside the protected areas or located in remote areas, at high altitudes and far from roads and big cities (for example in the Tsaratanana mountain region and around the Masoala peninsula, north-east Madagascar).
+
+```{r fcc_leaflet}
+# Leaflet map
+m <- leaflet() %>% addTiles() %>%
+  addRasterImage(r, colors=pal, opacity=0.8, project=FALSE) %>%
+  fitBounds(ext2@xmin,ext2@ymin,ext2@xmax,ext2@ymax)
+m
 ```
 
 ## References
