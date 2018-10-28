@@ -63,7 +63,7 @@ Download the image from internet with the following command in a terminal: `dock
 
 Note: If the internet connection is slow, use a USB key and copy the image somewhere on your computer and load it with the following command: `docker load -i <path to image tar file>`
 
-Run the container with `docker run -d -e PASSWORD=PWD -e ROOT=YES -p 8787:8787 -v ORIGIN_FOLDER:/home/rstudio ghislainv/docker-forestatrisk`.  
+Run the container with `docker run -d -e PASSWORD=PWD -e ROOT=true -p 8787:8787 -v ORIGIN_FOLDER:/home/rstudio ghislainv/docker-forestatrisk`.  
 
 Note:
 
