@@ -1,7 +1,7 @@
 ---
 title: "Modelling and forecasting deforestation"
-author: "Ghislain Vieilledent"
-date: "`r format(Sys.time(), '%d %B, %Y')`"
+author: "Nify Antitra"
+date: "30 Octobre 2018"
 output:
   html_notebook:
     highlight: tango
@@ -9,11 +9,15 @@ output:
     theme: spacelab
     toc: yes
     toc_float: yes
+  html_document:
+    df_print: paged
+    toc: yes
 bibliography: bib/biblio.bib
 biblio-style: bib/journal-of-applied-ecology.csl
 ---
 
 ```{r setup, include=FALSE}
+setwd("/home/ghislain/Code/forecasting-deforestation-Mada")
 library(knitr)
 knitr::opts_chunk$set(
 	echo=TRUE,
@@ -22,7 +26,7 @@ knitr::opts_chunk$set(
 	cache=FALSE
 )
 knitr::opts_knit$set(
-  root.dir=rprojroot::find_rstudio_root_file()
+  root.dir=getwd()
 )
 ```
 
@@ -72,6 +76,13 @@ Note:
 
 Point your browser to `localhost:8787` to access RStudio interface. Log in with `rstudio/PWD`.
 
+Note on docker's containers and images:    
+
+- List running containers: `docker ps`
+- List images: `docker images` or `docker image list`
+- Stop container: `docker stop <id container>`
+- Remove container `docker rm <idcontainer>`
+
 ### Get the tutorial
 
 In RStudio, open a terminal and clone the GitHub repository locally:  
@@ -83,7 +94,7 @@ I used this notebook to write the tutorial available at <https://ecology.ghislai
 
 In the preambule, change the author and date with your name and today's date.
 
-### Loading libraries in R
+### R libraries
 
 ```{r R_libraries}
 # Environmental variables
@@ -107,11 +118,11 @@ require(leaflet)
 source("R/dfp_plot.R")
 ```
 
-### Importing Python modules in R
+### Python in R
 
 Specify the Python version to use and check that it is the right one.
 
-```{r}
+```{r python_path}
 use_python("/usr/bin/python3.5")
 py_config()
 ```
@@ -139,9 +150,9 @@ smf <- import("statsmodels.formula.api")
 ##### Some exercises
 
 ```{r R_exercises}
-a = c(20,5,6,2,9,12)
-b = 1
-c = a + b
+a <- c(20,5,6,2,9,12)
+b <- 1
+c <- a + b
 print(c)
 ```
 
@@ -199,7 +210,12 @@ lines(x.pred,Y.pred[,3],col="blue",lwd=2,lty=2)
 
 ##### Some exercises
 
-You can execute Python code within a R notebooks.
+You can execute Python code within a R notebooks. We first need to indicate which version of Python to use in the notebook for Python chunk.
+
+```{r python_R}
+Sys.setenv(PATH=paste("/usr/bin/python3",
+           Sys.getenv("PATH"), sep=":"))
+```
 
 ```{python}
 import numpy as np
@@ -217,12 +233,12 @@ print(c)
 To model the spatial probability of deforestation, we need a map of the past deforestation and maps of potential explicative environmental variables. Environmental variables can be derived from topography (altitude and slope), accessibility (distance to roads, towns, and forest edge), deforestation history (distance to previous deforestation) or landscape policy (protected area network) for example. In our example, we use the following variables :
 
 ```{r variables}
-library(kableExtra)
+#library(kableExtra)
 tab1 <- read.table("training/tables/variables.txt",sep=",",header=TRUE)
 names(tab1) <- c("Product","Source","Variable derived","Unit","Resolution (m)")
 # Kable
-knitr::kable(tab1, linesep="") %>%
-  kable_styling(bootstrap_options = c("striped"))
+knitr::kable(tab1, linesep="") #%>%
+  #kable_styling(bootstrap_options = c("striped"))
 ```
 
 1. <http://bioscenemada.cirad.fr>, deforestation maps from @Vieilledent2018
@@ -242,7 +258,7 @@ if (!dir.exists("data")) {
 
 # Files
 files <- c("fordefor2010.tif", "dist_edge.tif", "dist_defor.tif",
-           "altitude.tif", "slope.tif", "aspect.tif",
+           "altitude.tif", "slope.tif",
            "dist_road.tif", "dist_town.tif", "dist_river.tif",
            "sapm.tif", "roads.kml", "towns.kml", "rivers.kml", "sapm.kml")
 
@@ -272,6 +288,10 @@ if (!file.exists("data/mada/mada38s.shp")) {
 In our example, `fordefor2010.tif` is a forest raster at 30m for the year 2010 considering the deforestation on the period 2000-2010 in Madagascar. We can plot this raster and zoom on a region with function `.plot.forest()` in the `forestatrisk` package to see the deforestation data. The remaining forest appears in green and the deforested areas appear in red.
 
 ```{r plot_fcc}
+# Make output directory
+if (!dir.exists("output")) {
+  dir.create("output")
+}
 # Plot forest cover change 2000-2010
 fig <- far$plot$fcc(input_fcc_raster="data/model/fordefor2010.tif",
              output_file="output/fcc.png",
@@ -290,12 +310,13 @@ The `.sample()` function also extracts information from environmental variables 
 
 The `.sample()` function identifies the spatial cell for each sample point (sample point are grouped within a spatial cell). Spatial cells and grouped observations are used to estimate the spatial autocorrelation of the deforestation process. The `csize` argument define the width (in km) of the square spatial cells. Each spatial cell will be attributed a parameter. To avoid estimating too many parameters, width of the square spatial cells must be sufficiently large. Both points sampling and extraction of environmental data are done by block to avoid memory problems for big datasets.
 
-```{r sampling}
-# Make output directory
-if (!dir.exists("output")) {
-  dir.create("output")
-}
+```{python}
+import forestatrisk
+help(forestatrisk.sample)
+```
 
+
+```{r sampling, results="hide"}
 # Training data-set
 if (!file.exists("output/sample.txt")) {
   samp <- far$sample(nsamp=10000L, Seed=1234L, csize=10L,
@@ -309,11 +330,14 @@ set.seed(1234)
 train <- sample(1:20000, size=10000, replace=FALSE)
 data_train <- samp[train,] %>% dplyr::filter(complete.cases(.))
 data_valid <- samp[-train,] %>% dplyr::filter(complete.cases(.))
-head(data_train)
-
+                                              
 ```
 
-Sampled observations can be plotted using function `.plot.obs()` from the deforestprob module. Dark red dots indicate deforestation observations and dark green dots indicate forest observations.
+```{r visu_sampling}
+head(data_train)
+```
+
+Sampled observations can be plotted using function `.plot.obs()` from the forestatrisk module. Dark red dots indicate deforestation observations and dark green dots indicate forest observations.
 
 ```{r plot_sample}
 # Plot sample points
@@ -337,11 +361,11 @@ Before modelling the deforestation, it is important to look at the relationship 
 
 # Model formulas
 formula_1 <- paste0("fordefor2010 ~ dist_road + dist_town + dist_defor +",
-                    "dist_river + dist_edge + altitude + slope + aspect - 1")
+                    "dist_river + dist_edge + altitude + slope - 1")
 # Standardized variables (mean=0, std=1)
 formula_2 <- paste0("fordefor2010 ~ scale(dist_road) + scale(dist_town) +",
                     "scale(dist_defor) + scale(dist_river) + scale(dist_edge) +",
-                    "scale(altitude) + scale(slope) + scale(aspect) - 1")
+                    "scale(altitude) + scale(slope) - 1")
 formulas <- c(formula_1, formula_2)
 
 # List to store figures
@@ -446,7 +470,8 @@ A model formula must also be defined to specify the explicative variables we wan
 ```{r formula}
 # Formula
 data_train$trials <- 1  # Set number of trials to one
-formula <- paste0("I(1-fordefor2010) + trials ~ C(sapm) + scale(altitude) + scale(slope) +",
+formula <- paste0("I(1-fordefor2010) + trials ~ C(sapm) + scale(altitude) +
+                  scale(slope) +",
                   "scale(dist_defor) + np.power(scale(dist_defor),2) + ",
                   "scale(dist_edge) + ",
                   "scale(dist_road) + scale(dist_town) + cell")
@@ -536,12 +561,12 @@ rho_plot(r.rho, mada, output_file="output/rho_ggplot.png",
 The `.predict_raster_binomial_iCAR()` function of the `forestatrisk` module can be used to predict the spatial probability of deforestation from an **hSDM_binomial_iCAR** model (i.e. an object of class `hSDM_binomial_iCAR`). The function writes a raster of predictions to the disk. The prediction is done by block to avoid memory problems for big datasets. Functions will return NA for pixels with no forest or for pixels with missing environmental variables.
 
 ```{r compute_predictions}
-far$predict_raster_binomial_iCAR(mod_binomial_iCAR, var_dir="data/model",
-                                 input_cell_raster="output/rho.tif",
-                                 input_forest_raster="data/model/fordefor2010.tif",
-                                 output_file="output/pred_binomial_iCAR.tif",
-                                 blk_rows=128L)
-
+far$predict_raster_binomial_iCAR(
+  mod_binomial_iCAR, var_dir="data/model",
+  input_cell_raster="output/rho.tif",
+  input_forest_raster="data/model/fordefor2010.tif",
+  output_file="output/pred_binomial_iCAR.tif",
+  blk_rows=128L)
 ```
 
 The raster of predictions can then be plotted.
@@ -559,14 +584,14 @@ Given the spatial probability of deforestation and the number of hectares that s
 
 In our example, we consider an annual deforestation of roughly 100,000 ha for Madagascar. Considering the period 2010-2050, this would correspond to 4 Mha of deforestation. This number can of course be more precise and refined considering various deforestation scenarios (demographic growth, economic development, etc.).
 
-```{r compute_future_forest_cover}
+```{r compute_future_forest_cover, results="hide"}
 deforest <- far$deforest(input_raster="output/pred_binomial_iCAR.tif",
                          hectares=4000000,
                          output_file="output/forest_cover_2050.tif",
                          blk_rows=128L)
 ```
 
-We can plot the predicted future forest cover in 2050 with [leaflet](http://rstudio.github.io/leaflet/). We first reproject the raster to WGS 84 / World Mercator projection ([EPSG:3857](http://spatialreference.org/ref/sr-org/7483/)) and we resample the map at 250 m using function `gdalwarp` from `GDAL` to obtain a lower resolution raster that can be transformed into a lower size image that can be plotted with leaflet.
+We can plot the predicted future forest cover in 2050 with [leaflet](http://rstudio.github.io/leaflet/). We first reproject the raster to WGS 84 / World Mercator projection ([EPSG:3857](http://spatialreference.org/ref/sr-org/7483/)) and we resample the map at 250 m using function `gdalwarp` from `GDAL`. The 250 m resolution raster that can be transformed into a lower size image that can be plotted with leaflet.
 
 ```{bash}
 gdalwarp -overwrite -s_srs EPSG:32738 -t_srs EPSG:3857 -tr 250 250 \
@@ -580,7 +605,8 @@ We also set the color of the map and the extent of the view for leaflet.
 # Colors and extent view for leaflet
 r <- raster("output/forest_cover_2050_epsg3857_ov32.tif")
 pal <- colorFactor(c("red", "darkgreen"), c(0,1), na.color = "transparent")
-r1 <- raster(nrows=1,ncols=1,ext=extent(340000,412000,7420000,7500000),crs=CRS("+init=epsg:32738"))
+r1 <- raster(nrows=1,ncols=1,ext=extent(340000,412000,7420000,7500000),
+             crs=CRS("+init=epsg:32738"))
 r2 <- projectExtent(r1, crs=CRS("+init=epsg:4326"))
 ext2 <- extent(r2)
 ```
@@ -594,5 +620,237 @@ m <- leaflet() %>% addTiles() %>%
   fitBounds(ext2@xmin,ext2@ymin,ext2@xmax,ext2@ymax)
 m
 ```
+
+## Model performance
+
+#### Deviance explained
+
+With our model, we found a deviance of 9580.
+
+#### Spatial validation 
+
+Using the validation data-set, we can compute several model performance indices [@Liu2011]:
+
+- FOM: figure of merit
+- OA: overall accuracy
+- EA: expected accuracy
+- Spe: specificity
+- Sen: sensitivity
+- TSS: true skill statistics
+- K: kappa of Cohen
+- AUC: area under the (ROC) curve
+
+It is known that the value of some of these indices might vary with the intensity of deforestation [@Pontius2008]. 
+
+```{r fig_Pontius, echo=FALSE}
+knitr::include_graphics("training/figures/Pontius2008-ARS-FOM.png")
+```
+
+In our case, we compute these indices for various values of the deforestation rate (in percentage of deforestation observations) in our validation data-set (1, 5, 10, 25, 50). For each percentage, the threshold used to convert the predicted probabilities of deforestation were choosen in order to respect the deforestation rate (in %) in the observations.   
+
+```{r model_perf}
+source("R/perf.R")
+
+# Udpate cell number in dataset
+cell_rank <- vector()
+for (i in 1:nrow(data_valid)) {
+  cell_rank[i] <- which(cell_in==data_valid$cell[i])-1 # ! cells start at zero
+}
+data_valid$cell <- cell_rank
+
+# Performance iCAR
+set.seed(1234)
+performance_iCAR <- performance_index(data_valid,mod_binomial_iCAR)
+write.table(performance_iCAR,file="output/performance_iCAR.txt")
+performance_iCAR
+```
+
+#### Temporal validation
+
+Considering the period 2010-2017, we can compare model's predictions in the future with the observed deforestation on the same period. 
+
+First, we compute the observed forest cover change raster on the period 2010-2017 from the forest cover in 2010 and 2017.
+
+```{bash}
+# Set nodata different from 255
+gdal_translate -a_nodata 99 -co 'COMPRESS=LZW' -co 'PREDICTOR=2' \
+               data/model/fordefor2010.tif output/fordefor2010_.tif
+
+gdal_translate -a_nodata 99 -co 'COMPRESS=LZW' -co 'PREDICTOR=2' \
+               data/validation/for2017.tif output/for2017_.tif
+               
+# Compute forest-cover change between 2010 and 2017
+gdal_calc.py --overwrite -A output/fordefor2010_.tif -B output/for2017_.tif --outfile=output/fcc_2010_2017_obs.tif --type=Byte --calc='255-254*(A==1)*(B==1)-255*(A==1)*(B==255)' --co 'COMPRESS=LZW' --co 'PREDICTOR=2' --NoDataValue=255
+
+```
+
+We compute the deforested area on the period 2010-2017.
+
+```{r defor_area_2010_2017, results="hide"}
+# Number of deforested pixels
+count_d <- far$countpix("output/fcc_2010_2017_obs.tif", value=0L, blk_rows=128L)
+```
+
+Results are in hectares and number of pixels.
+
+```{r count_d}
+count_d
+```
+
+Second, we derive the predicted forest-cover change map for the period 2010-2017 following a total deforestation of 871,336 hectares between the two dates. 
+
+Note: Because forest covers about 9.3 Mha in 2010 [@Vieilledent2018], this corresponds to a total deforestation rate of about 9% on the period 2010-2017, and to an annual deforestation rate of about 1.34%.yr$^{-1}$. 
+
+```{r fcc_2010_2017_iCAR, echo=TRUE, results="hide"}
+# Model predictions 2010-2017
+fcc_iCAR_2017 <- far$deforest(input_raster="output/pred_binomial_iCAR.tif",
+                              hectares=count_d$area,
+                              output_file="output/fcc_2010_2017_iCAR.tif",
+                              blk_rows=128L)
+```
+
+Third, we compute the indices based on the two maps.
+
+```{r indices_2010_2017}
+indices_2010_2017_iCAR <- far$validation(pred="output/fcc_2010_2017_iCAR.tif",
+                                         obs="output/fcc_2010_2017_obs.tif",
+                                         blk_rows=128L)
+as.data.frame(indices_2010_2017_iCAR)
+```
+
+## Model comparison
+
+### Model types
+
+- null model
+- nsre model: no spatial random effect model
+
+```{r null_model}
+# Null model
+formula_null <- "I(1-fordefor2010) ~ 1"
+dmat_null <- patsy$dmatrices(formula_null, data=r_to_py(data_train), NA_action="drop",
+                             return_type="dataframe", eval_env=-1L)
+Y <- dmat_null[[1]]
+X_null <- dmat_null[[2]]
+mod_null <- sm$GLM(Y, X_null, family=sm$families$Binomial())$fit()
+print(mod_null$summary())
+```
+
+
+```{r nsre_model}
+# Model nsre with no spatial random effects
+formula_nsre <- paste0("I(1-fordefor2010) ~ C(sapm) + scale(altitude) + ",
+                       "scale(slope) + scale(dist_defor) + I(scale(dist_defor)*scale(dist_defor)) + ",
+                       "scale(dist_edge) + scale(dist_road) + scale(dist_town)")
+mod_nsre <- smf$glm(formula_nsre, r_to_py(data_train), family=sm$families$Binomial(), eval_env=-1L)$fit()
+# Summary nsre
+sink(file="output/summary_mod_binomial_nsre.txt")
+print(mod_nsre$summary())
+sink()
+print(mod_nsre$summary())
+
+```
+
+
+### Deviance explained
+
+```{r deviance}
+# Deviances
+deviance_null <- mod_null$deviance
+deviance_nsre <- mod_nsre$deviance
+deviance_icar <- mod_binomial_iCAR$deviance
+deviance_full <- 0
+# Table
+dev <- c(deviance_null, deviance_nsre, deviance_icar, deviance_full)
+mod_dev <- data.frame(model=c("null", "nsre", "icar", "full"),
+                  deviance=round(dev))
+perc <- 100*(1-mod_dev$deviance/deviance_null)
+mod_dev$perc <- round(perc)
+write.table(mod_dev,file="output/deviance_model_comparison.txt",sep=",",row.names=FALSE)
+mod_dev
+```
+
+
+### Spatial validation
+
+```{r perf_nsre}
+# Performance nsre
+performance_nsre <- performance_index(data_valid,mod_nsre)
+performance_nsre
+```
+
+### Temporal validation
+
+#### Compute raster of probabilities
+
+Model (nsre) + environmental variables (raster) => probabilities
+
+```{r prob_nsre}
+# Compute predictions with logistic regression
+fig_pred_nsre <- far$predict_raster(mod_nsre, var_dir="data/model",
+                                    input_forest_raster="data/model/fordefor2010.tif",
+                                    output_file="output/pred_nsre.tif",
+                                    blk_rows=128L, transform=TRUE)
+```
+
+#### Predicted fcc with nsre
+
+Probabilities (raster) + deforested areas 2010-2017 (871336 ha) => prediction of forest cover change (fcc) 2010-2017
+
+```{r fcc_2010_2017_nsre, results="hide"}
+# Model predictions 2010-2017
+fcc_nsre_2017 <- far$deforest(input_raster="output/pred_nsre.tif",
+                              hectares=count_d$area,
+                              output_file="output/fcc_2010_2017_nsre.tif",
+                              blk_rows=128L)
+```
+
+#### Performance indices
+
+fcc_pred + fcc_obs => confusion matrix => performance indices
+
+```{r indices_2010_2017_nsre}
+indices_2010_2017_nsre <- far$validation(pred="output/fcc_2010_2017_nsre.tif",
+                                         obs="output/fcc_2010_2017_obs.tif",
+                                         blk_rows=128L)
+as.data.frame(indices_2010_2017_nsre)
+```
+
+### Differences in projections in 2050
+
+Objective: compare predictions in 2050 for iCAR and nsre
+
+#### Predictions in 2050 of nsre
+
+```{r fcc_2010_2050_nsre, results="hide"}
+# Model predictions 2010-2017
+fcc_nsre_2050 <- far$deforest(input_raster="output/pred_nsre.tif",
+                              hectares=4000000,
+                              output_file="output/fcc_2010_2050_nsre.tif",
+                              blk_rows=128L)
+```
+
+#### Compute and plot differences
+
+We compute the differences between the two rasters
+
+```{r rast_diff, results="hide"}
+# Raster of differences
+far$differences(inputA = "output/forest_cover_2050.tif",
+                inputB = "output/fcc_2010_2050_nsre.tif",
+                output_file = "output/diff_iCAR_nsre_2050.tif",
+                blk_rows = 1L)
+
+```
+
+We plot the differences
+
+```{r plot_diff}
+far$plot$differences("output/diff_iCAR_nsre_2050.tif",
+                     borders = "data/mada/mada38s.shp",
+                     output_file = "output/diff_iCAR_nsre_2050.png")
+knitr::include_graphics("output/diff_iCAR_nsre_2050.png")
+```
+
 
 ## References

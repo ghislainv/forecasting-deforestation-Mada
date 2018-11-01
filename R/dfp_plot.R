@@ -71,4 +71,4 @@ diff_plot <- function(input_raster, input_vector, output_file, maxpixels=50000, 
 	return(p)
 }
 
-
+# End
