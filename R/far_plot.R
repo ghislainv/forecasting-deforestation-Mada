@@ -54,7 +54,7 @@ diff_plot <- function(input_raster, input_vector, output_file, maxpixels=50000, 
 		ylim = NULL
 	}
 	# Call to ggplot
-	p <- rasterVis::gplot(input_raster, maxpixels=maxpixels) +
+	p <- rasterVis::levelplot(input_raster, maxpixels=maxpixels) +
 		geom_raster(aes(fill=factor(value))) +
 		scale_fill_manual(values=c("red","forestgreen","darkblue","lightblue"), na.value="transparent") +
 		{if (!is.null(rect))
