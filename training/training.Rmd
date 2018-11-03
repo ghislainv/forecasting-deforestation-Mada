@@ -3,14 +3,15 @@ title: "Modelling and forecasting deforestation"
 author: "Ghislain Vieilledent"
 date: "`r format(Sys.time(),'%B %e, %Y')`"
 output:
-  bookdown::html_book:
+  rmarkdown::html_document:
     highlight: tango
     number_sections: no
-    theme: spacelab
     toc: yes
     toc_float: yes
 bibliography: bib/biblio.bib
 biblio-style: bib/journal-of-applied-ecology.csl
+editor_options: 
+  chunk_output_type: inline
 ---
 
 ```{r setup, echo=FALSE, message=FALSE}
@@ -26,7 +27,7 @@ opts_chunk$set(
 	cache.lazy=FALSE 
 )
 opts_knit$set(
-  root.dir=normalizePath("../")
+  root.dir=normalizePath("/home/ghislain/Code/forecasting-deforestation-Mada")
 )
 ```
 
@@ -114,7 +115,7 @@ require(leaflet)
 require(kableExtra)
 ```
 
-```{r source_R}
+```{r source_R, cache=FALSE}
 # Source R plotting functions
 source("R/far_plot.R")
 ```
@@ -672,7 +673,7 @@ Considering the period 2010-2017, we can compare model's predictions in the futu
 
 First, we compute the observed forest cover change raster on the period 2010-2017 from the forest cover in 2010 and 2017.
 
-```{bash}
+```{bash fcc_2010_2017_valid}
 if [ ! -f output/fcc_2010_2017_obs.tif ]
 then
 # Set nodata different from 255
@@ -834,73 +835,15 @@ if (!file.exists("output/prob_glm.tif")) {
 }
 ```
 
-```{r prob_rf_xy}
-if (!file.exists("output/prob_rfxy.tif")) {
+```{r prob_rf}
+if (!file.exists("output/prob_rf.tif")) {
   # Compute predictions with logistic regression
-  fig_prob_rfxy <- far$predict_raster(mod_rf_xy, var_dir="data/model",
+  fig_prob_rfxy <- far$predict_raster(mod_rf, var_dir="data/model",
                                       input_forest_raster="data/model/fordefor2010.tif",
-                                      output_file="output/prob_rf_xy.tif",
-                                      blk_rows=128L, transform=TRUE)
+                                      output_file="output/prob_rf.tif",
+                                      blk_rows=128L)
 }
 ```
 
-#### Predicted fcc with glm
-
-Probabilities (raster) + deforested areas 2010-2017 (871336 ha) => prediction of forest cover change (fcc) 2010-2017
-
-```{r fcc_2010_2017_glm, results="hide"}
-# Model predictions 2010-2017
-fcc_glm_2017 <- far$deforest(input_raster="output/prob_glm.tif",
-                              hectares=count_d$area,
-                              output_file="output/fcc_2010_2017_glm.tif",
-                              blk_rows=128L)
-```
-
-#### Performance indices
-
-fcc_pred + fcc_obs => confusion matrix => performance indices
-
-```{r indices_2010_2017_glm}
-indices_2010_2017_glm <- far$validation(pred="output/fcc_2010_2017_glm.tif",
-                                         obs="output/fcc_2010_2017_obs.tif",
-                                         blk_rows=128L)
-as.data.frame(indices_2010_2017_glm)
-```
-
-### Differences in projections in 2050
-
-Objective: compare predictions in 2050 for iCAR and glm
-
-#### Predictions in 2050 of glm
-
-```{r fcc_2010_2050_glm, results="hide"}
-# Model predictions 2010-2017
-fcc_glm_2050 <- far$deforest(input_raster="output/prob_glm.tif",
-                              hectares=4000000,
-                              output_file="output/fcc_2010_2050_glm.tif",
-                              blk_rows=128L)
-```
-
-#### Compute and plot differences
-
-We compute the differences between the two rasters
-
-```{r rast_diff, results="hide"}
-# Raster of differences
-far$differences(inputA = "output/forest_cover_2050.tif",
-                inputB = "output/fcc_2010_2050_glm.tif",
-                output_file = "output/diff_iCAR_glm_2050.tif",
-                blk_rows = 1L)
-
-```
-
-We plot the differences
-
-```{r plot_diff}
-far$plot$differences("output/diff_iCAR_glm_2050.tif",
-                     borders = "data/mada/mada38s.shp",
-                     output_file = "output/diff_iCAR_glm_2050.png")
-knitr::include_graphics("output/diff_iCAR_glm_2050.png")
-```
 
 ## References
