@@ -674,7 +674,7 @@ Considering the period 2010-2017, we can compare model's predictions in the futu
 First, we compute the observed forest cover change raster on the period 2010-2017 from the forest cover in 2010 and 2017.
 
 ```{bash fcc_2010_2017_valid}
-if [ ! -f output/fcc_2010_2017_obs.tif ]
+if [ ! -f output/proj2017_obs.tif ]
 then
 # Set nodata different from 255
 gdal_translate -a_nodata 99 -co 'COMPRESS=LZW' -co 'PREDICTOR=2' \
@@ -684,7 +684,7 @@ gdal_translate -a_nodata 99 -co 'COMPRESS=LZW' -co 'PREDICTOR=2' \
                data/validation/for2017.tif output/for2017_.tif
                
 # Compute forest-cover change between 2010 and 2017
-gdal_calc.py --overwrite -A output/fordefor2010_.tif -B output/for2017_.tif --outfile=output/fcc_2010_2017_obs.tif --type=Byte --calc='255-254*(A==1)*(B==1)-255*(A==1)*(B==255)' --co 'COMPRESS=LZW' --co 'PREDICTOR=2' --NoDataValue=255
+gdal_calc.py --overwrite -A output/fordefor2010_.tif -B output/for2017_.tif --outfile=output/proj2017_obs.tif --type=Byte --calc='255-254*(A==1)*(B==1)-255*(A==1)*(B==255)' --co 'COMPRESS=LZW' --co 'PREDICTOR=2' --NoDataValue=255
 fi
 ```
 
@@ -750,7 +750,8 @@ print(mod_null$summary())
 formula_glm <- paste0("I(1-fordefor2010) ~ C(sapm) + scale(altitude) + ",
                        "scale(slope) + scale(dist_defor) + I(scale(dist_defor)*scale(dist_defor)) + ",
                        "scale(dist_edge) + scale(dist_road) + scale(dist_town)")
-mod_glm <- smf$glm(formula_glm, r_to_py(data_train), family=sm$families$Binomial(), eval_env=-1L)$fit()
+mod_glm <- smf$glm(formula_glm, r_to_py(data_train),
+									 family=sm$families$Binomial(), eval_env=-1L)$fit()
 # Summary glm
 sink(file="output/summary_mod_binomial_glm.txt")
 print(mod_glm$summary())
@@ -825,7 +826,7 @@ df_mod_valid
 
 Models + environmental variables (raster) => probabilities
 
-```{r prob_glm}
+```{r prob_glm, results="hide"}
 if (!file.exists("output/prob_glm.tif")) {
   # Compute predictions with logistic regression
   fig_prob_glm <- far$predict_raster(mod_glm, var_dir="data/model",
@@ -835,15 +836,69 @@ if (!file.exists("output/prob_glm.tif")) {
 }
 ```
 
-```{r prob_rf}
+```{r prob_rf, results="hide"}
 if (!file.exists("output/prob_rf.tif")) {
   # Compute predictions with logistic regression
-  fig_prob_rfxy <- far$predict_raster(mod_rf, var_dir="data/model",
-                                      input_forest_raster="data/model/fordefor2010.tif",
-                                      output_file="output/prob_rf.tif",
-                                      blk_rows=128L)
+  fig_prob_rf <- far$predict_raster(mod_rf, var_dir="data/model",
+                                    input_forest_raster="data/model/fordefor2010.tif",
+                                    output_file="output/prob_rf.tif",
+                                    blk_rows=128L)
 }
 ```
 
+```{r prob_rf_xy, results="hide"}
+if (!file.exists("output/prob_rf_xy.tif")) {
+  # Compute predictions with logistic regression
+  fig_prob_rf <- far$predict_raster(mod_rf_xy, var_dir="data/model",
+                                    input_forest_raster="data/model/fordefor2010.tif",
+                                    output_file="output/prob_rf_xy.tif",
+                                    blk_rows=128L)
+}
+```
+
+#### Project forest cover change on 2010-2017
+
+```{r proj2017_glm, results="hide"}
+if (!file.exists("output/proj2017_glm.tif")) {
+  deforest <- far$deforest(input_raster="output/prob_glm.tif",
+                           hectares=871336,
+                           output_file="output/proj2017_glm.tif",
+                           blk_rows=128L)
+}
+```
+
+```{r proj2017_rf, results="hide"}
+if (!file.exists("output/proj2017_rf.tif")) {
+  deforest <- far$deforest(input_raster="output/prob_rf.tif",
+                           hectares=871336,
+                           output_file="output/proj2017_rf.tif",
+                           blk_rows=128L)
+}
+```
+
+```{r proj2017_rf_xy, results="hide"}
+if (!file.exists("output/proj2017_rf_xy.tif")) {
+  deforest <- far$deforest(input_raster="output/prob_rf_xy.tif",
+                           hectares=871336,
+                           output_file="output/proj2017_rf_xy.tif",
+                           blk_rows=128L)
+}
+```
+
+#### Compute performance indexes
+
+```{r tval_glm}
+tval_glm_df <- far$validation_npix(r_pred="output/proj2017_glm.tif",
+                                   r_obs="output/proj2017_obs.tif",
+                                   output_file="output/val_npix_glm.txt", 
+                                   value_f=1,
+                                   value_d=0,
+                                   square_size=33L)
+tval_glm_df <- read.table("output/val_npix_glm.txt",header=TRUE,sep=",")
+source("R/perf.R")
+e <- extent(raster("output/proj2017_glm.tif"))
+cor_glm <- cor_scale(df=tval_glm_df, e=e, square_size=33)
+
+```
 
 ## References
