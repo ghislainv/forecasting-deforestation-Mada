@@ -86,18 +86,18 @@ cor_scale <- function(df,e,square_size=33) {
 		dplyr::mutate(box0=0:(nrow(df)-1)) %>%
 		dplyr::filter(!(obs_f==0 & obs_d==0)) # Remove squares with no forest
 	
-	# Coordinates of the centers of the 10-km boxes
+	# Coordinates of the centers of the ~1 km boxes
 	box_size0 <- 30*square_size
-	ncol <- ceiling((xmax(e)-xmin(e))/box_size0)
-	nrow <- ceiling((ymax(e)-ymin(e))/box_size0)
+	ncol <- ceiling((xmax(e) - xmin(e)) / box_size0)
+	nrow <- ceiling((ymax(e) - ymin(e)) / box_size0)
 	y_box <- floor(df$box0/ncol) # quotient
 	x_box <- df$box0 %% ncol # remainder
 	y <- ymax(e)-box_size0*(y_box+0.5)
 	x <- xmin(e)+box_size0*(x_box+0.5)
 	# Box number from x,y coordinates and box size
-	coeff <- c(1,2,5,10,15,25,50,75,100,150)
+	coeff <- c(1,2,5,10,15,25,50,75,100,200)
 	box_size <- box_size0 * coeff # box_size in m
-	CV <- R2 <- Cor <- vector()
+	nbox <- Cor <- vector()
 	# Loop on box size
 	for (i in 1:length(box_size)) {
 		# Box size
@@ -105,11 +105,11 @@ cor_scale <- function(df,e,square_size=33) {
 		# Number of boxes
 		ncol <- ceiling((xmax(e) - xmin(e)) / b)
 		nrow <- ceiling((ymax(e) - ymin(e)) / b)
-		nbox <- ncol * nrow
+		nbox[i] <- ncol * nrow
 		# Box identification
-		J <- floor((x - xmin(e)) / b)
-		I <- floor((ymax(e) - y) / b)
-		box <- I * ncol + J
+		I <- floor((x - xmin(e)) / b)
+		J <- floor((ymax(e) - y) / b)
+		box <- J * ncol + I
 		# Sum deforested areas by box
 		obs_d <- df %>% mutate(box=box) %>%
 			group_by(box) %>% summarise(sum_obs_d_ha=sum(obs_d_ha)) %>%
@@ -117,13 +117,11 @@ cor_scale <- function(df,e,square_size=33) {
 		pred_d <- df %>% mutate(box=box) %>%
 			group_by(box) %>% summarise(sum_pred_d_ha=sum(pred_d_ha)) %>%
 			pull(sum_pred_d_ha)
-		#plot(obs_d,pred_d)
-		CV[i] <- CV_f(obs_d,pred_d)
-		R2[i] <- R2_f(obs_d,pred_d)
+		# Correlation
 		Cor[i] <- cor(obs_d,pred_d,method="pearson")
 	}
 	# Return
-	return(list(CV=CV,R2=R2,Cor=Cor))
+	return(data.frame(coeff=coeff,box_size=box_size,nbox=nbox,cor=Cor))
 }
 
 # End

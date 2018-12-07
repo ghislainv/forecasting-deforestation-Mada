@@ -106,6 +106,7 @@ require(reticulate)
 require(glue)
 require(curl)
 require(dplyr)
+require(readr)
 require(broom)
 require(ggplot2)
 require(raster)
@@ -382,7 +383,7 @@ In this example (see pdf files produced), we can see that a linear model should 
 
 ## Deforestation model
 
-We propose to use the **Binomial iCAR** model [@Vieilledent2014] to estimate the deforestation probability of a pixel given a set of environmental variables. The Binomial iCAR model is a linear Binomial logistic regression model including an intrinsic Conditional Autoregressive (iCAR) process to account for the spatial autocorrelation of the observations. Parameter inference is done in a hierarchical Bayesian framework. The `.model_binomial_iCAR()` function from the `forestatrisk` module includes a Metropolis-within-Gibbs algorithm written in pure C code to reduce computation time.
+We propose to use the **Binomial icar** model [@Vieilledent2014] to estimate the deforestation probability of a pixel given a set of environmental variables. The Binomial icar model is a linear Binomial logistic regression model including an intrinsic Conditional Autoregressive (icar) process to account for the spatial autocorrelation of the observations. Parameter inference is done in a hierarchical Bayesian framework. The `.model_binomial_icar()` function from the `forestatrisk` module includes a Metropolis-within-Gibbs algorithm written in pure C code to reduce computation time.
 
 ```{r Bayes, echo=FALSE}
 knitr::include_graphics("training/figures/Bayes.jpg")
@@ -390,7 +391,7 @@ knitr::include_graphics("training/figures/Bayes.jpg")
 
 Figure caption: **Parameter inference is done in a hierarchical Bayesian framework.** Bayesian statistics rely on the [Bayes' theorem](https://en.wikipedia.org/wiki/Bayes'_theorem) named after [Reverend Thomas Bayes](https://en.wikipedia.org/wiki/Thomas_Bayes). Each parameter has a prior and an approximated posterior probability distribution from which we can compute the mean, standard deviation, credible intervals at 95%, etc.
 
-For the deforestation process it is _**very important to take into account the spatial autocorrelation of the process**_ with spatial random effects. Indeed, the selected fixed environmental variables are not able to fully explain the spatial variability of the deforestation process, especially when working at large geographical scales, such as the national or continental scale. Spatial random effects allow estimating a higher/lower probability of deforestation in a particular region (associated to **unmeasurable** or **unknow** factors) that is different from the mean probability of deforestation derived from the environmental factors included in the model. The Binomial iCAR model can be described as follow:
+For the deforestation process it is _**very important to take into account the spatial autocorrelation of the process**_ with spatial random effects. Indeed, the selected fixed environmental variables are not able to fully explain the spatial variability of the deforestation process, especially when working at large geographical scales, such as the national or continental scale. Spatial random effects allow estimating a higher/lower probability of deforestation in a particular region (associated to **unmeasurable** or **unknow** factors) that is different from the mean probability of deforestation derived from the environmental factors included in the model. The Binomial icar model can be described as follow:
 
 **Ecological process**
 
@@ -415,7 +416,7 @@ $j(i)$: index of the spatial entity for observation $i$.
   
 **Spatial autocorrelation**
   
-The spatial autocorrelation is modelled with an intrinsic conditional autoregressive (iCAR) process:
+The spatial autocorrelation is modelled with an intrinsic conditional autoregressive (icar) process:
 
 \begin{equation}
 \rho_j \sim \mathcal{N}ormal(\mu_j,V_{\rho} / n_j)
@@ -427,11 +428,11 @@ $V_{\rho}$: variance of the spatial random effects.
   
 $n_j$: number of neighbors for spatial entity $j$.
 
-```{r iCAR_process, echo=FALSE}
-knitr::include_graphics("training/figures/iCAR.png")
+```{r icar_process, echo=FALSE}
+knitr::include_graphics("training/figures/icar.png")
 ```
 
-Figure caption: **Representation of the neighborhood for the intrinsic conditional autoregressive (iCAR) process.** Target spatial cell $j$ has 8 neighbors in this case. Several observations (black points, equivalent to pixel centers in our case) can be located in each spatial cell. Deforestation probability in one spatial cell $j$ depends on deforestation probability in neighboring cells.
+Figure caption: **Representation of the neighborhood for the intrinsic conditional autoregressive (icar) process.** Target spatial cell $j$ has 8 neighbors in this case. Several observations (black points, equivalent to pixel centers in our case) can be located in each spatial cell. Deforestation probability in one spatial cell $j$ depends on deforestation probability in neighboring cells.
 
 ### Spatial cells
 
@@ -453,7 +454,6 @@ for (i in 1:nrow(data_train)) {
   cell_rank[i] <- which(cell_in==data_train$cell[i])-1 # ! cells start at zero
 }
 data_train$cell <- cell_rank
-
 ```
 
 ### Model formula
@@ -468,15 +468,13 @@ formula <- paste0("I(1-fordefor2010) + trials ~ C(sapm) + scale(altitude) +
                   "scale(dist_defor) + np.power(scale(dist_defor),2) + ",
                   "scale(dist_edge) + ",
                   "scale(dist_road) + scale(dist_town) + cell")
-
-
 ```
 
 ### Fitting model parameters
 
 ```{r model}
 # Model
-mod_binomial_iCAR <- far$model_binomial_iCAR(
+mod_icar <- far$model_binomial_iCAR(
   # Observations
   suitability_formula=formula, data=data_train,
   # Spatial structure
@@ -487,34 +485,33 @@ mod_binomial_iCAR <- far$model_binomial_iCAR(
   burnin=1000L, mcmc=1000L, thin=1L,
   # Starting values
   beta_start=-99)
-
 ```
 
 ### Model summary
 
 Once the model has been fitted, we can print a summary of the model showing the parameter estimates. The 95% credible intervals obtained from the posterior distribution of each parameter, except distance to nearest town (`dist_town`), do not include zero, indicating that parameters are significantly different from zero. The variance of the spatial random effects (`Vrho`) is given together with the deviance value, which can be used to compare different statistical models (lower deviance is better). Looking at the parameter estimates, we can see that the deforestation probability is much lower inside protected areas and that deforestation probability decreases with altitude, slope, distance to past deforestation, forest edge, roads and towns. Parameter values are then coherent regarding the deforestation process and easy to interpret.
 
-```{r summary_iCAR}
-sink(file="output/summary_mod_binomial_iCAR.txt")
-print(mod_binomial_iCAR)
+```{r summary_icar}
+sink(file="output/summary_mod_icar.txt")
+print(mod_icar)
 sink()
-print(mod_binomial_iCAR)
+print(mod_icar)
 ```
 
 ### Plot traces and posteriors
 
-To check for the convergence of the Markov chain Monte Carlo (MCMC), we can plot the traces and the posterior distributions of the estimated parameters using method `.plot()` associated to the `hSDM_binomial_iCAR` class defined in the `deforestprob` module. This method returns the figures showing the traces and posterior distributions.
+To check for the convergence of the Markov chain Monte Carlo (MCMC), we can plot the traces and the posterior distributions of the estimated parameters using method `.plot()` associated to the `hSDM_binomial_icar` class defined in the `deforestprob` module. This method returns the figures showing the traces and posterior distributions.
 
 ```{r plot_with_py, echo=FALSE}
-traces_fig <- mod_binomial_iCAR$plot(output_file="output/mcmc.pdf",
-                                     plots_per_page=3L,
-                                     figsize=c(9,6),
-                                     dpi=100)
+traces_fig <- mod_icar$plot(output_file="output/mcmc.pdf",
+                            plots_per_page=3L,
+                            figsize=c(9,6),
+                            dpi=100)
 ```
 
 ```{r plot_with_r}
 require(coda)
-mcmc <- as.mcmc(mod_binomial_iCAR$mcmc)
+mcmc <- as.mcmc(mod_icar$mcmc)
 plot(mcmc[,c(1:3,10,11)])
 ```
 
@@ -527,7 +524,7 @@ We use the model to predict the spatial probability of deforestation at the nati
 ```{r rho, fig.height=7, message=FALSE, warning=FALSE}
 # Get the spatial random effects
 rho <- rep(-9999,ncell)  # -9999 will be considered as nodata
-rho[cell_in+1] <- mod_binomial_iCAR$rho
+rho[cell_in+1] <- mod_icar$rho
 
 # Resample them
 fig <- far$resample_rho(rho=r_to_py(rho), input_raster="data/model/fordefor2010.tif",
@@ -551,15 +548,15 @@ rho_plot(r.rho, mada, output_file="output/rho_ggplot.png",
 
 ### Computing spatial probability of deforestation
 
-The `.predict_raster_binomial_iCAR()` function of the `forestatrisk` module can be used to predict the spatial probability of deforestation from an **hSDM_binomial_iCAR** model (i.e. an object of class `hSDM_binomial_iCAR`). The function writes a raster of predictions to the disk. The prediction is done by block to avoid memory problems for big datasets. Functions will return NA for pixels with no forest or for pixels with missing environmental variables.
+The `.predict_raster_binomial_icar()` function of the `forestatrisk` module can be used to predict the spatial probability of deforestation from an **hSDM_binomial_icar** model (i.e. an object of class `hSDM_binomial_icar`). The function writes a raster of predictions to the disk. The prediction is done by block to avoid memory problems for big datasets. Functions will return NA for pixels with no forest or for pixels with missing environmental variables.
 
 ```{r compute_predictions}
-if (!file.exists("output/prob_binomial_iCAR.tif")) {
-  far$predict_raster_binomial_iCAR(
-    mod_binomial_iCAR, var_dir="data/model",
+if (!file.exists("output/prob_binomial_icar.tif")) {
+  far$predict_raster_binomial_icar(
+    mod_binomial_icar, var_dir="data/model",
     input_cell_raster="output/rho.tif",
     input_forest_raster="data/model/fordefor2010.tif",
-    output_file="output/prob_binomial_iCAR.tif",
+    output_file="output/prob_binomial_icar.tif",
     blk_rows=128L)
 }
 ```
@@ -567,12 +564,12 @@ if (!file.exists("output/prob_binomial_iCAR.tif")) {
 The raster of predictions can then be plotted.
 
 ```{r plot_predictions}
-if (!file.exists("output/prob_binomial_iCAR.png")) {
-  fig <- far$plot$prob("output/prob_binomial_iCAR.tif",
-                       output_file="output/prob_binomial_iCAR.png",
+if (!file.exists("output/prob_icar.png")) {
+  fig <- far$plot$prob("output/prob_icar.tif",
+                       output_file="output/prob_icar.png",
                        figsize=c(4,4))
 }
-knitr::include_graphics("output/prob_binomial_iCAR.png")
+knitr::include_graphics("output/prob_icar.png")
 ```
 
 ### Predicting future forest cover
@@ -582,10 +579,10 @@ Given the spatial probability of deforestation and the number of hectares that s
 In our example, we consider an annual deforestation of roughly 100,000 ha for Madagascar. Considering the period 2010-2050, this would correspond to 4 Mha of deforestation. This number can of course be more precise and refined considering various deforestation scenarios (demographic growth, economic development, etc.).
 
 ```{r compute_future_forest_cover, results="hide"}
-if (!file.exists("output/forest_cover_2050.tif")) {
-  deforest <- far$deforest(input_raster="output/prob_binomial_iCAR.tif",
+if (!file.exists("output/proj2050_icar.tif")) {
+  deforest <- far$deforest(input_raster="output/prob_icar.tif",
                            hectares=4000000,
-                           output_file="output/forest_cover_2050.tif",
+                           output_file="output/proj2050_icar.tif",
                            blk_rows=128L)
 }
 ```
@@ -593,11 +590,11 @@ if (!file.exists("output/forest_cover_2050.tif")) {
 We can plot the predicted future forest cover in 2050 with [leaflet](http://rstudio.github.io/leaflet/). We first reproject the raster to WGS 84 / World Mercator projection ([EPSG:3857](http://spatialreference.org/ref/sr-org/7483/)) and we resample the map at 250 m using function `gdalwarp` from `GDAL`. The 250 m resolution raster that can be transformed into a lower size image that can be plotted with leaflet.
 
 ```{bash resample}
-if [ ! -f output/forest_cover_2050_epsg3857_ov32.tif ]
+if [ ! -f output/proj2050_icar_epsg3857_ov32.tif ]
 then
   gdalwarp -overwrite -s_srs EPSG:32738 -t_srs EPSG:3857 -tr 250 250 \
          -ot Byte -r near -co "COMPRESS=LZW" -co "PREDICTOR=2" -co "BIGTIFF=YES" \
-         output/forest_cover_2050.tif output/forest_cover_2050_epsg3857_ov32.tif
+         output/proj2050_icar.tif output/proj2050_icar_epsg3857_ov32.tif
 fi
 ```
 
@@ -605,7 +602,7 @@ We also set the color of the map and the extent of the view for leaflet.
 
 ```{r col_leaflet}
 # Colors and extent view for leaflet
-r <- raster("output/forest_cover_2050_epsg3857_ov32.tif")
+r <- raster("output/proj2050_icar_epsg3857_ov32.tif")
 pal <- colorFactor(c("red", "darkgreen"), c(0,1), na.color = "transparent")
 r1 <- raster(nrows=1,ncols=1,ext=extent(340000,412000,7420000,7500000),
              crs=CRS("+init=epsg:32738"))
@@ -660,11 +657,11 @@ for (i in 1:nrow(data_valid)) {
 }
 data_valid$cell <- cell_rank
 
-# Performance iCAR
+# Performance icar
 set.seed(1234)
-performance_iCAR <- performance_index(data_valid,mod_binomial_iCAR)
-write.table(performance_iCAR,file="output/performance_iCAR.txt")
-performance_iCAR
+performance_icar <- performance_index(data_valid,mod_binomial_icar)
+write.table(performance_icar,file="output/performance_icar.txt")
+performance_icar
 ```
 
 #### Temporal validation
@@ -673,7 +670,7 @@ Considering the period 2010-2017, we can compare model's predictions in the futu
 
 First, we compute the observed forest cover change raster on the period 2010-2017 from the forest cover in 2010 and 2017.
 
-```{bash fcc_2010_2017_valid}
+```{bash proj2017_obs.tif}
 if [ ! -f output/proj2017_obs.tif ]
 then
 # Set nodata different from 255
@@ -692,7 +689,7 @@ We compute the deforested area on the period 2010-2017.
 
 ```{r defor_area_2010_2017, results="hide"}
 # Number of deforested pixels
-count_d <- far$countpix("output/fcc_2010_2017_obs.tif", value=0L, blk_rows=128L)
+count_d <- far$countpix("output/proj2017_obs.tif", value=0L, blk_rows=128L)
 ```
 
 Results are in hectares and number of pixels.
@@ -705,12 +702,12 @@ Second, we derive the predicted forest-cover change map for the period 2010-2017
 
 Note: Because forest covers about 9.3 Mha in 2010 [@Vieilledent2018], this corresponds to a total deforestation rate of about 9% on the period 2010-2017, and to an annual deforestation rate of about 1.34%.yr$^{-1}$. 
 
-```{r fcc_2010_2017_iCAR, echo=TRUE, results="hide"}
+```{r proj2017_icar, echo=TRUE, results="hide"}
 # Model predictions 2010-2017
-if (!file.exists("output/fcc_2010_2017_iCAR.tif")) {
-  fcc_iCAR_2017 <- far$deforest(input_raster="output/prob_binomial_iCAR.tif",
-                                hectares=count_d$area,
-                                output_file="output/fcc_2010_2017_iCAR.tif",
+if (!file.exists("output/proj2017_icar.tif")) {
+  fcc_icar_2017 <- far$deforest(input_raster="output/prob_binomial_icar.tif",
+                                hectares=871336, #count_d$area,
+                                output_file="output/proj2017_icar.tif",
                                 blk_rows=128L)
 }
 ```
@@ -718,10 +715,10 @@ if (!file.exists("output/fcc_2010_2017_iCAR.tif")) {
 Third, we compute the indices based on the two maps.
 
 ```{r indices_2010_2017}
-indices_2010_2017_iCAR <- far$validation(pred="output/fcc_2010_2017_iCAR.tif",
-                                         obs="output/fcc_2010_2017_obs.tif",
+indices_2010_2017_icar <- far$validation(pred="output/proj2017_icar.tif",
+                                         obs="output/proj2017_obs.tif",
                                          blk_rows=128L)
-as.data.frame(indices_2010_2017_iCAR)
+as.data.frame(indices_2010_2017_icar)
 ```
 
 ## Model comparison
@@ -744,7 +741,6 @@ mod_null <- sm$GLM(Y, X_null, family=sm$families$Binomial())$fit()
 print(mod_null$summary())
 ```
 
-
 ```{r glm_model}
 # Simple glm with no spatial random effects
 formula_glm <- paste0("I(1-fordefor2010) ~ C(sapm) + scale(altitude) + ",
@@ -761,8 +757,7 @@ print(mod_glm$summary())
 ```
 
 ```{r rf_model}
-source_python("Python/model_random_forest.py")
-formula_rf <- paste0("I(1-fordefor2010) ~ sapm + altitude + ",
+formula_rf <- paste0("I(1-fordefor2010) ~ 0 + sapm + altitude + ",
                      "slope + dist_defor + dist_edge + dist_road + dist_town")
 
 mod_rf <- model_random_forest(formula=formula_rf, data=data_train, 
@@ -770,7 +765,7 @@ mod_rf <- model_random_forest(formula=formula_rf, data=data_train,
 ```
 
 ```{r rfxy_model}
-formula_rf_xy <- paste0("I(1-fordefor2010) ~ sapm + altitude + ",
+formula_rf_xy <- paste0("I(1-fordefor2010) ~ 0 + sapm + altitude + ",
                         "slope + dist_defor + dist_edge + dist_road + dist_town + X + Y")
 mod_rf_xy <- model_random_forest(formula=formula_rf_xy, data=data_train, 
                                  eval_env=-1L, n_estimators=500L, n_jobs=2L)
@@ -782,7 +777,7 @@ mod_rf_xy <- model_random_forest(formula=formula_rf_xy, data=data_train,
 # Deviances
 deviance_null <- mod_null$deviance
 deviance_glm <- mod_glm$deviance
-deviance_icar <- mod_binomial_iCAR$deviance
+deviance_icar <- mod_icar$deviance
 deviance_full <- 0
 # Table
 dev <- c(deviance_null, deviance_glm, deviance_icar, deviance_full)
@@ -802,17 +797,22 @@ performance_glm <- performance_index(data_valid,mod_glm)
 performance_rf <- performance_index(data_valid,mod_rf)
 performance_rf_xy <- performance_index(data_valid,mod_rf_xy)
 # Save
-write.table(performance_null, file="output/performance_null.txt", sep="\t", row.names=FALSE)
-write.table(performance_glm, file="output/performance_glm.txt", sep="\t", row.names=FALSE)
-write.table(performance_rf, file="output/performance_rf.txt", sep="\t", row.names=FALSE)
-write.table(performance_rf_xy, file="output/performance_rf_xy.txt", sep="\t", row.names=FALSE)
-write.table(performance_iCAR, file="output/performance_iCAR.txt", sep="\t", row.names=FALSE)
+write.table(performance_null, file="output/performance_null.txt",
+						sep="\t", row.names=FALSE)
+write.table(performance_glm, file="output/performance_glm.txt",
+						sep="\t", row.names=FALSE)
+write.table(performance_rf, file="output/performance_rf.txt",
+						sep="\t", row.names=FALSE)
+write.table(performance_rf_xy, file="output/performance_rf_xy.txt",
+						sep="\t", row.names=FALSE)
+write.table(performance_icar, file="output/performance_icar.txt",
+						sep="\t", row.names=FALSE)
 # Save for perc=10%
 df_mod_valid <- rbind(performance_null[3,],performance_glm[3,],
                       performance_rf[3,],performance_rf_xy[3,],
-                      performance_iCAR[3,])
+                      performance_icar[3,])
 df_mod_valid <- df_mod_valid %>%
-  dplyr::mutate(mod=c("null","glm","rf","rf_xy","iCAR")) %>%
+  dplyr::mutate(mod=c("null","glm","rf","rf_xy","icar")) %>%
   dplyr::select(10,2:9)
 write.table(df_mod_valid, file="output/df_mod_valid.txt", sep="\t", row.names=FALSE)
 
@@ -888,17 +888,68 @@ if (!file.exists("output/proj2017_rf_xy.tif")) {
 #### Compute performance indexes
 
 ```{r tval_glm}
-tval_glm_df <- far$validation_npix(r_pred="output/proj2017_glm.tif",
-                                   r_obs="output/proj2017_obs.tif",
-                                   output_file="output/val_npix_glm.txt", 
-                                   value_f=1,
-                                   value_d=0,
-                                   square_size=33L)
+if (!file.exists("output/val_npix_glm.txt")) {
+	tval_glm_df <- far$validation_npix(r_pred="output/proj2017_glm.tif",
+																		 r_obs="output/proj2017_obs.tif",
+																		 output_file="output/val_npix_glm.txt", 
+																		 value_f=1,
+																		 value_d=0,
+																		 square_size=33L)
+}
 tval_glm_df <- read.table("output/val_npix_glm.txt",header=TRUE,sep=",")
-source("R/perf.R")
 e <- extent(raster("output/proj2017_glm.tif"))
 cor_glm <- cor_scale(df=tval_glm_df, e=e, square_size=33)
+```
 
+```{r tval_rf}
+if (!file.exists("output/val_npix_rf.txt")) {
+	tval_rf_df <- far$validation_npix(r_pred="output/proj2017_rf.tif",
+																		 r_obs="output/proj2017_obs.tif",
+																		 output_file="output/val_npix_rf.txt", 
+																		 value_f=1,
+																		 value_d=0,
+																		 square_size=33L)
+}
+tval_rf_df <- read.table("output/val_npix_rf.txt",header=TRUE,sep=",")
+e <- extent(raster("output/proj2017_rf.tif"))
+cor_rf <- cor_scale(df=tval_rf_df, e=e, square_size=33)
+```
+
+```{r tval_rf_xy}
+if (!file.exists("output/val_npix_rf_xy.txt")) {
+	tval_rf_xy_df <- far$validation_npix(r_pred="output/proj2017_rf_xy.tif",
+																		 r_obs="output/proj2017_obs.tif",
+																		 output_file="output/val_npix_rf_xy.txt", 
+																		 value_f=1,
+																		 value_d=0,
+																		 square_size=33L)
+}
+tval_rf_xy_df <- read.table("output/val_npix_rf_xy.txt",header=TRUE,sep=",")
+e <- extent(raster("output/proj2017_rf_xy.tif"))
+cor_rf_xy <- cor_scale(df=tval_rf_xy_df, e=e, square_size=33)
+```
+
+```{r tval_icar}
+if (!file.exists("output/val_npix_icar.txt")) {
+	tval_icar_df <- far$validation_npix(r_pred="output/proj2017_icar.tif",
+																		 r_obs="output/proj2017_obs.tif",
+																		 output_file="output/val_npix_icar.txt", 
+																		 value_f=1,
+																		 value_d=0,
+																		 square_size=33L)
+}
+tval_icar_df <- read.table("output/val_npix_icar.txt",header=TRUE,sep=",")
+e <- extent(raster("output/proj2017_icar.tif"))
+cor_icar <- cor_scale(df=tval_icar_df, e=e, square_size=33)
+```
+
+```{r cor_comp}
+cor_comp <- cor_glm %>%
+	dplyr::rename(cor_glm=cor) %>%
+	dplyr::mutate(cor_rf=cor_rf$cor,cor_rf_xy=cor_rf_xy$cor,cor_icar=cor_icar$cor) %>%
+	dplyr::select(-coeff)
+readr::write_csv(cor_comp,path="output/cor_comp.txt")
+cor_comp
 ```
 
 ## References
