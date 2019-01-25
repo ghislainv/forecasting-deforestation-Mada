@@ -14,16 +14,52 @@ computeAUC <- function(pos.scores, neg.scores, n_sample=100000) {
   return(AUC)
 }
 
-# Performance
-performance_index <- function(data_valid, model="nochange") {
-  # Model predictions for validation dataset
-  if (model=="nochange") {
-    data_valid$theta_pred <- 0
-  } else if (model=="null") {
-    data_valid$theta_pred <- runif(nrow(data_valid))
+# Accuracy_indices
+accuracy_indices <- function(pred, obs) {
+  
+  if (identical(dim(pred),as.integer(c(2,2)))) {
+    df <- pred
+    n00 <- df[1,1]
+    n10 <- df[2,1]
+    n01 <- df[1,2]
+    n11 <- df[2,2]
   } else {
-    data_valid$theta_pred <- model$predict(data_valid)
+    
+    # Create pandas data-frame
+    df <- data.frame(pred=pred, obs=obs)
+    
+    # Confusion matrix
+    n00 <- sum((df["pred"] == 0) & (df["obs"] == 0))
+    n10 <- sum((df["pred"] == 1) & (df["obs"] == 0))
+    n01 <- sum((df["pred"] == 0) & (df["obs"] == 1))
+    n11 <- sum((df["pred"] == 1) & (df["obs"] == 1))
   }
+  
+  # Accuracy indices
+  N <- n11 + n10 + n00 + n01
+  OA <- (n11 + n00) / N
+  FOM <- n11 / (n11 + n10 + n01)
+  Sensitivity <- n11 / (n11 + n01)
+  Specificity <- n00 / (n00 + n10)
+  TSS <- Sensitivity + Specificity - 1
+  Prob_1and1 <- (n11 + n10) * (n11 + n01)
+  Prob_0and0 <- (n00 + n01) * (n00 + n10)
+  Expected_accuracy <- (Prob_1and1 + Prob_0and0) / (N * N)
+  Kappa <- (OA - Expected_accuracy) / (1 - Expected_accuracy)
+  
+  r <- data.frame(OA=round(OA, 2), EA=round(Expected_accuracy, 2),
+                  FOM=round(FOM, 2),
+                  Sen=round(Sensitivity, 2),
+                  Spe=round(Specificity, 2),
+                  TSS=round(TSS, 2), K=round(Kappa, 2))
+  
+  return(r)
+}
+
+# Performance
+performance_index <- function(data_valid, theta_pred) {
+  # Model predictions for validation dataset
+  data_valid$theta_pred <- theta_pred
   # Number of observations
   nforest <- sum(data_valid$fordefor2010==1)  # 1 for forest in fordefor2010
   ndefor <- sum(data_valid$fordefor2010==0)
@@ -40,16 +76,12 @@ performance_index <- function(data_valid, model="nochange") {
     data_extract <- data_valid[c(which_forest,samp_defor),]
     data_extract$pred <- 0
     # Probability threshold to transform probability into binary values
-    if (model=="nochange") {
-      proba_thresh <- 1
-    } else {
-      proba_thresh <- quantile(data_extract$theta_pred, 1-perc/100)  # ! must be 1-proba_defor
-    }
+    proba_thresh <- quantile(data_extract$theta_pred, 1-perc/100)  # ! must be 1-proba_defor
     data_extract$pred[data_extract$theta_pred >= proba_thresh] <- 1
     # Computing accuracy indices
     pred <- data_extract$pred
     obs <- 1-data_extract$fordefor2010
-    perf <- as.data.frame(far$accuracy_indices(pred,obs)) %>% 
+    perf <- accuracy_indices(pred,obs) %>% 
       dplyr::select(FOM,OA,EA,Spe,Sen,TSS,K)
     performance[i,2:8] <- perf
     # AUC
