@@ -826,7 +826,7 @@ df_mod_valid
 
 Models + environmental variables (raster) => probabilities
 
-```{r prob_glm, results="hide"}
+```{r prob, results="hide"}
 if (!file.exists("output/prob_glm.tif")) {
   # Compute predictions with logistic regression
   fig_prob_glm <- far$predict_raster(mod_glm, var_dir="data/model",
@@ -954,30 +954,16 @@ cor_comp
 
 #### Project forest cover change on 2010-2050
 
-```{r proj2050_glm, results="hide"}
-if (!file.exists("output/proj2050_glm.tif")) {
-  deforest <- far$deforest(input_raster="output/prob_glm.tif",
-                           hectares=4000000,
-                           output_file="output/proj2050_glm.tif",
-                           blk_rows=128L)
-}
-```
-
-```{r proj2050_rf, results="hide"}
-if (!file.exists("output/proj2050_rf.tif")) {
-  deforest <- far$deforest(input_raster="output/prob_rf.tif",
-                           hectares=4000000,
-                           output_file="output/proj2050_rf.tif",
-                           blk_rows=128L)
-}
-```
-
-```{r proj2050_rfxy, results="hide"}
-if (!file.exists("output/proj2050_rfxy.tif")) {
-  deforest <- far$deforest(input_raster="output/prob_rfxy.tif",
-                           hectares=4000000,
-                           output_file="output/proj2050_rfxy.tif",
-                           blk_rows=128L)
+```{r proj2050, results="hide"}
+mod <- c("icar", "glm", "rf", "rfxy")
+for (i in 1:length(mod)) {
+  if (!file.exists(glue("output/diff2050_{mod[i]}.tif"))) {
+    cat(glue("Projections in 2050: {mod[i]}"),"\n")
+    deforest <- far$deforest(input_raster=glue("output/prob_{mod[i]}.tif"),
+                             hectares=4000000,
+                             output_file=glue("output/proj2050_{mod[i]}.tif"),
+                             blk_rows=128L)
+  }
 }
 ```
 
@@ -985,86 +971,68 @@ if (!file.exists("output/proj2050_rfxy.tif")) {
 
 First we compute the differences between model projections for 2050.
 
-```{r diff2050_icar_glm}
-if (!file.exists("output/diff2050_icar_glm.tif")) {
-  far$r_diffproj(inputA="output/proj2050_icar.tif",
-                  inputB="output/proj2050_glm.tif",
-                  output_file="output/diff2050_icar_glm.tif",
-                  blk_rows=1L)
+```{r diff2050}
+comp <- c("icar_glm", "icar_rf", "icar_rfxy", "rfxy_rf")
+index_diff2050_30m <- NULL
+for (i in 1:length(comp)) {
+  cat(glue("Differences in 2050: {comp[i]}"),"\n")
+  if (!file.exists(glue("output/diff2050_{comp[i]}.tif"))) {
+    m1 <- unlist(strsplit("icar_glm","_"))[1]
+    m2 <- unlist(strsplit("icar_glm","_"))[2]
+    far$r_diffproj(inputA=glue("output/proj2050_{m1}.tif"),
+                   inputB=glue("output/proj2050_{m2}.tif"),
+                   output_file=glue("output/diff2050_{comp[i]}.tif"),
+                   blk_rows=1L)
+  }
+  mat <- far$mat_diffproj(glue("output/diff2050_{comp[i]}.tif"))
+  index_diff2050_30m <- rbind(index_diff2050_30m, accuracy_indices(mat))
+  diff2050_comp_30m <- index_diff2050_30m %>%
+    dplyr::mutate(res=rep(30,4),comp=comp) %>%
+	  dplyr::select(8,9,1:7)
 }
-mat_icar_glm <- far$mat_diffproj("output/diff2050_icar_glm.tif")
-index_icar_glm <- accuracy_indices(mat_icar_glm)
 ```
 
-```{r diff2050_icar_rf}
-if (!file.exists("output/diff2050_icar_rf.tif")) {
-  far$r_diffproj(inputA="output/proj2050_icar.tif",
-                 inputB="output/proj2050_rf.tif",
-                 output_file="output/diff2050_icar_rf.tif",
-                 blk_rows=1L)
-}
-mat_icar_rf <- far$mat_diffproj("output/diff2050_icar_rf.tif")
-index_icar_rf <- accuracy_indices(mat_icar_rf)
-```
+We resample the differences at various resolution (1, 5 and 10 km) using a "mode" resampling method.
 
-```{r diff2050_icar_rfxy}
-if (!file.exists("output/diff2050_icar_rfxy.tif")) {
-  far$r_diffproj(inputA="output/proj2050_icar.tif",
-                 inputB="output/proj2050_rfxy.tif",
-                 output_file="output/diff2050_icar_rfxy.tif",
-                 blk_rows=1L)
+```{r resampling_diff}
+resname <- c("250m", "500m", "1km", "5km", "10km")
+res <- c(250, 500, 1000, 5000, 10000)
+index_comp <- NULL
+for (i in 1:length(res)) {
+  for (j in 1:length(comp)) {
+    if (!file.exists(glue("output/diff2050_{comp[j]}_{resname[i]}.tif"))) {
+      system(glue("gdalwarp -overwrite -tr {res[i]} {res[i]} \\
+         -ot Byte -r mode -co 'COMPRESS=LZW' -co 'PREDICTOR=2' -co 'BIGTIFF=YES' \\
+         output/diff2050_{comp[j]}.tif output/diff2050_{comp[j]}_{resname[i]}.tif"))
+    }
+    mat_comp <- far$mat_diffproj(glue("output/diff2050_{comp[j]}_{resname[i]}.tif"))
+    index_comp <- rbind(index_comp, accuracy_indices(mat_comp))
+  }
 }
-mat_icar_rfxy <- far$mat_diffproj("output/diff2050_icar_rfxy.tif")
-index_icar_rfxy <- accuracy_indices(mat_icar_rfxy)
-```
-
-```{r diff2050_rfxy_rf}
-if (!file.exists("output/diff2050_rfxy_rf.tif")) {
-  far$r_diffproj(inputA="output/proj2050_rfxy.tif",
-                 inputB="output/proj2050_rf.tif",
-                 output_file="output/diff2050_rfxy_rf.tif",
-                 blk_rows=1L)
-}
-mat_rfxy_rf <- far$mat_diffproj("output/diff2050_rfxy_rf.tif")
-index_rfxy_rf <- accuracy_indices(mat_rfxy_rf)
+diff2050_comp <- index_comp %>%
+  dplyr::mutate(res=rep(res,each=4),comp=rep(comp,5)) %>%
+  dplyr::select(8,9,1:7)
 ```
 
 We summarize the results in a single table
 
 ```{r diff_comp}
-diff2050_comp <- dplyr::bind_rows(index_icar_glm, index_icar_rf,
-                             index_icar_rfxy, index_rfxy_rf) %>%
-  dplyr::mutate(comp=c("icar_glm","icar_rf","icar_rfxy","rfxy_rf")) %>%
-	dplyr::select(8,1:7)
+diff2050_comp <- rbind(diff2050_comp_30m, diff2050_comp)
 readr::write_csv(diff2050_comp,path="output/diff2050_comp.txt")
 diff2050_comp
 ```
 
 We plot the differences.
 
-```{r diff2050_icar_glm_plot}
-far$plot$differences("output/diff2050_icar_glm.tif",
-                     borders="data/mada/mada38s.shp",
-                     output_file="output/diff2050_icar_glm.png")
-```
-
-```{r diff2050_icar_rf_plot}
-far$plot$differences("output/diff2050_icar_rf.tif",
-                     borders="data/mada/mada38s.shp",
-                     output_file="output/diff2050_icar_rf.png")
-```
-
-```{r diff2050_icar_rfxy_plot}
-far$plot$differences("output/diff2050_icar_rfxy.tif",
-                     borders="data/mada/mada38s.shp",
-                     output_file="output/diff2050_icar_rfxy.png")
-```
-
-
-```{r diff2050_rfxy_rf_plot}
-far$plot$differences("output/diff2050_rfxy_rf.tif",
-                     borders="data/mada/mada38s.shp",
-                     output_file="output/diff2050_rfxy_rf.png")
+```{r diff2050_plot}
+for (i in 1:length(comp)) {
+  #if (!file.exists(glue("output/diff2050_{comp[i]}.tif"))) {
+    cat(glue("Plot difference: {comp[i]}"),"\n")
+    far$plot$differences(glue("output/diff2050_{comp[i]}.tif"),
+                         borders="data/mada/mada38s.shp",
+                         output_file=glue("output/diff2050_{comp[i]}.png"))
+  #}
+}
 ```
 
 Plots can also be done with `ggplot2`. Note: use sf for mada borders
