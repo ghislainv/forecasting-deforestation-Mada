@@ -143,12 +143,12 @@ gdalwarp -overwrite -t_srs $proj -te $extent -r bilinear \
          -tr 90 90 srtm.vrt altitude.tif
 
 # Compute slope and aspect
-gdaldem slope altitude.tif slope_.tif -co "COMPRESS=LZW" -co "PREDICTOR=2"
-gdaldem aspect altitude.tif aspect_.tif -co "COMPRESS=LZW" -co "PREDICTOR=2"
+gdaldem slope altitude.tif slope_.tif -compute_edges -co "COMPRESS=LZW" -co "PREDICTOR=2"
+#gdaldem aspect altitude.tif aspect_.tif -compute_edges -co "COMPRESS=LZW" -co "PREDICTOR=2"
 
 # Convert to Int16
 gdal_translate -ot Int16 -co "COMPRESS=LZW" -co "PREDICTOR=2" slope_.tif slope.tif
-gdal_translate -ot Int16 -co "COMPRESS=LZW" -co "PREDICTOR=2" aspect_.tif aspect.tif
+#gdal_translate -ot Int16 -co "COMPRESS=LZW" -co "PREDICTOR=2" aspect_.tif aspect.tif
 
 # ===========================
 # Forest
@@ -186,6 +186,12 @@ gdal_calc.py --overwrite -A _dist_defor.tif --outfile=dist_defor.tif --type=UInt
              --calc="A*(A!=65535)" --co "COMPRESS=LZW" --co "PREDICTOR=2" \
              --NoDataValue=0
 
+# Compute forest-cover change (proj2017_obs.tif) between 2010 and 2017	     
+gdal_translate -a_nodata 99 -co 'COMPRESS=LZW' -co 'PREDICTOR=2' for2017.tif for2017_.tif
+gdal_calc.py --overwrite -A for2010_.tif -B for2017_.tif --outfile=proj2017_obs.tif --type=Byte \
+             --calc="255-254*(A==1)*(B==1)-255*(A==1)*(B==255)" --co "COMPRESS=LZW" --co "PREDICTOR=2" \
+             --NoDataValue=255
+
 # # ===========================
 # # Cleaning
 # # ===========================
@@ -196,7 +202,7 @@ echo "Cleaning directory\n"
 # Create clean data directory
 mkdir -p ../data
 # Copy files
-cp -t ../data fordefor2010.tif dist_*.tif *.kml altitude.tif slope.tif aspect.tif sapm.tif
+cp -t ../data fordefor2010.tif dist_*.tif *.kml altitude.tif slope.tif sapm.tif
 # Remove raw data directory
 cd ..
 rm -R data_raw
