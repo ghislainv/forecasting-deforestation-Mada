@@ -137,14 +137,83 @@ sm <- import("statsmodels.api")
 smf <- import("statsmodels.formula.api")
 ```
 
-### Test percentage_correct
+### Percentage correct
 
-```{r test_perc_corr}
-perc_corr <- far$percentage_correct("output/proj2017_obs.tif", "output/proj2017_icar.tif")
-obs <- perc_corr[1,,]
-pred <- perc_corr[2,,]
-sum(apply(obs,2,sum))
-sum(apply(pred,2,sum))
+```{r percentage_correct}
+dir.create("output/perc_correct")
+dirout <- "output/perc_correct"
+resolutions <- c(10, 25, 50, 100, 250, 500, 1000) #  c(2, 5, 10, 25, 50, 100, 250, 500, 1000)
+mat_conf_icar <- mat_conf_glm <- list()
+# Loop on resolutions
+for (i in 1:length(resolutions)) {
+  res <- resolutions[i]
+  r_out <- glue("{dirout}/proj2017_obs_sum1_w{res}.tif")
+  if (!file.exists(r_out)) {
+    # obs
+    far$resample_sum("output/proj2017_obs.tif",
+                     glue("{dirout}/proj2017_obs_sum1_w{res}.tif"),
+                     val=1, window_size=as.integer(res))
+    far$resample_sum("output/proj2017_obs.tif",
+                     glue("{dirout}/proj2017_obs_sum0_w{res}.tif"),
+                     val=0, window_size=as.integer(res))
+    # icar
+    far$resample_sum("output/proj2017_icar.tif",
+                     glue("{dirout}/proj2017_icar_sum1_w{res}.tif"),
+                     val=1, window_size=as.integer(res))
+    far$resample_sum("output/proj2017_icar.tif",
+                     glue("{dirout}/proj2017_icar_sum0_w{res}.tif"),
+                     val=0, window_size=as.integer(res))
+    # glm
+    far$resample_sum("output/proj2017_glm.tif",
+                     glue("{dirout}/proj2017_glm_sum1_w{res}.tif"),
+                     val=1, window_size=as.integer(res))
+    far$resample_sum("output/proj2017_glm.tif",
+                     glue("{dirout}/proj2017_glm_sum0_w{res}.tif"),
+                     val=0, window_size=as.integer(res))
+  }
+  # Compute percentage correct
+  # icar
+  mat_conf_icar[[i]] <- far$percentage_correct(
+      r_obs0=glue("{dirout}/proj2017_obs_sum0_w{res}.tif"),
+      r_obs1=glue("{dirout}/proj2017_obs_sum1_w{res}.tif"),
+      r_pred0=glue("{dirout}/proj2017_icar_sum0_w{res}.tif"),
+      r_pred1=glue("{dirout}/proj2017_icar_sum1_w{res}.tif"))
+  # glm
+  mat_conf_glm[[i]] <- far$percentage_correct(
+      r_obs0=glue("{dirout}/proj2017_obs_sum0_w{res}.tif"),
+      r_obs1=glue("{dirout}/proj2017_obs_sum1_w{res}.tif"),
+      r_pred0=glue("{dirout}/proj2017_glm_sum0_w{res}.tif"),
+      r_pred1=glue("{dirout}/proj2017_glm_sum1_w{res}.tif"))
+}
+
+# Check number of cells
+#lapply(mat_conf_icar, sum)
+
+# Compute indices
+acc_mod <- NULL
+for (i in 1:length(resolutions)) {
+  acc <- as.data.frame(far$accuracy_confmat(mat_conf_glm[[i]])) %>%
+    dplyr::select(OA, EA, FOM, Spe, Sen, TSS, K)
+  acc_mod <- rbind(acc_mod, acc) 
+  acc <- as.data.frame(far$accuracy_confmat(mat_conf_icar[[i]])) %>%
+    dplyr::select(OA, EA, FOM, Spe, Sen, TSS, K)
+  acc_mod <- rbind(acc_mod, acc) 
+}
+acc_mod$mod <- rep(c("glm","icar"), each=7)
+acc_mod$res <- rep(resolutions, 2)
+acc_mod <- acc_mod %>%
+  tidyr::gather(OA, EA, FOM, Spe, Sen, TSS, K, key="index",value="value")
+
+# Export
+write_csv(acc_mod, "output/models_accuracy.csv")
+
+# Plot with ggplot2
+library(ggplot2)
+p <- acc_mod %>%
+  dplyr::filter(index=="FOM")
+  ggplot(p, aes(x=res, y=value, group=mod)) +
+  geom_line()
+
 ```
 
 ### R/Python intro
