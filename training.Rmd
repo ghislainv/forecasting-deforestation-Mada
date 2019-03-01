@@ -139,39 +139,31 @@ smf <- import("statsmodels.formula.api")
 
 ### Percentage correct
 
-```{r percentage_correct}
+```{r percentage_correct, eval=FALSE}
 dir.create("output/perc_correct")
 dirout <- "output/perc_correct"
-resolutions <- c(10, 25, 50, 100, 250, 500, 1000) #  c(2, 5, 10, 25, 50, 100, 250, 500, 1000)
+resolutions <- c(2, 5, 10, 25, 50, 100, 250, 500, 1000)
+models <- c("obs","icar","glm")
 mat_conf_icar <- mat_conf_glm <- list()
-# Loop on resolutions
+# Resample
 for (i in 1:length(resolutions)) {
   res <- resolutions[i]
-  r_out <- glue("{dirout}/proj2017_obs_sum1_w{res}.tif")
-  if (!file.exists(r_out)) {
-    # obs
-    far$resample_sum("output/proj2017_obs.tif",
-                     glue("{dirout}/proj2017_obs_sum1_w{res}.tif"),
-                     val=1, window_size=as.integer(res))
-    far$resample_sum("output/proj2017_obs.tif",
-                     glue("{dirout}/proj2017_obs_sum0_w{res}.tif"),
-                     val=0, window_size=as.integer(res))
-    # icar
-    far$resample_sum("output/proj2017_icar.tif",
-                     glue("{dirout}/proj2017_icar_sum1_w{res}.tif"),
-                     val=1, window_size=as.integer(res))
-    far$resample_sum("output/proj2017_icar.tif",
-                     glue("{dirout}/proj2017_icar_sum0_w{res}.tif"),
-                     val=0, window_size=as.integer(res))
-    # glm
-    far$resample_sum("output/proj2017_glm.tif",
-                     glue("{dirout}/proj2017_glm_sum1_w{res}.tif"),
-                     val=1, window_size=as.integer(res))
-    far$resample_sum("output/proj2017_glm.tif",
-                     glue("{dirout}/proj2017_glm_sum0_w{res}.tif"),
-                     val=0, window_size=as.integer(res))
+  for (j in 1:length(models)) {
+    mod <- models[j]
+    r_out <- glue("{dirout}/proj2017_{mod}_sum1_w{res}.tif")
+    if (!file.exists(r_out)) {
+      far$resample_sum(glue("output/proj2017_{mod}.tif"),
+                       glue("{dirout}/proj2017_{mod}_sum1_w{res}.tif"),
+                       val=1, window_size=as.integer(res))
+      far$resample_sum(glue("output/proj2017_{mod}.tif"),
+                       glue("{dirout}/proj2017_{mod}_sum0_w{res}.tif"),
+                       val=0, window_size=as.integer(res))
+    }
   }
-  # Compute percentage correct
+}
+# Compute percentage correct
+for (i in 1:length(resolutions)) {
+  res <- resolutions[i]
   # icar
   mat_conf_icar[[i]] <- far$percentage_correct(
       r_obs0=glue("{dirout}/proj2017_obs_sum0_w{res}.tif"),
@@ -188,6 +180,7 @@ for (i in 1:length(resolutions)) {
 
 # Check number of cells
 #lapply(mat_conf_icar, sum)
+#lapply(mat_conf_glm, sum)
 
 # Compute indices
 acc_mod <- NULL
@@ -199,8 +192,8 @@ for (i in 1:length(resolutions)) {
     dplyr::select(OA, EA, FOM, Spe, Sen, TSS, K)
   acc_mod <- rbind(acc_mod, acc) 
 }
-acc_mod$mod <- rep(c("glm","icar"), each=7)
-acc_mod$res <- rep(resolutions, 2)
+acc_mod$mod <- rep(c("glm","icar"), 9)
+acc_mod$res <- rep(resolutions, each=2)
 acc_mod <- acc_mod %>%
   tidyr::gather(OA, EA, FOM, Spe, Sen, TSS, K, key="index",value="value")
 
@@ -210,10 +203,16 @@ write_csv(acc_mod, "output/models_accuracy.csv")
 # Plot with ggplot2
 library(ggplot2)
 p <- acc_mod %>%
-  dplyr::filter(index=="FOM")
-  ggplot(p, aes(x=res, y=value, group=mod)) +
-  geom_line()
+  dplyr::filter(index=="TSS")
+  ggplot(p, aes(x=res, y=value, color=mod)) +
+  geom_line() + xlim(0,500)
 
+# Todo:
+# -facet plot with indices
+# -compute mean indices with weighted mean per res
+# -indices for res=1
+# -transform res in m
+  
 ```
 
 ### R/Python intro
@@ -389,7 +388,7 @@ help(forestatrisk.sample)
 ```{r sampling, results="hide"}
 # Training data-set
 if (!file.exists("output/sample.txt")) {
-  samp <- far$sample(nsamp=10000L, Seed=1234L, csize=10L,
+  samp <- far$sample(nsamp=20000L, Seed=1234L, csize=10L,
                      var_dir="data/model",
                      input_forest_raster="fordefor2010.tif",
                      output_file="output/sample.txt",
@@ -397,7 +396,7 @@ if (!file.exists("output/sample.txt")) {
 }
 samp <- read.table("output/sample.txt", header=TRUE, sep=",")
 set.seed(1234)
-train <- sample(1:20000, size=10000, replace=FALSE)
+train <- sample(1:40000, size=20000, replace=FALSE)
 data_train <- samp[train,] %>% dplyr::filter(complete.cases(.))
 data_valid <- samp[-train,] %>% dplyr::filter(complete.cases(.))
 ```
@@ -564,7 +563,7 @@ mod_icar <- far$model_binomial_iCAR(
   # Environment
   eval_env=-1L,
   # Chains
-  burnin=1000L, mcmc=1000L, thin=1L,
+  burnin=2000L, mcmc=5000L, thin=5L,
   # Starting values
   beta_start=-99)
 ```
@@ -609,7 +608,7 @@ rho <- rep(-9999,ncell)  # -9999 will be considered as nodata
 rho[cell_in+1] <- mod_icar$rho
 
 # Resample them
-fig <- far$resample_rho(rho=r_to_py(rho), input_raster="data/model/fordefor2010.tif",
+fig <- far$interpolate_rho(rho=r_to_py(rho), input_raster="data/model/fordefor2010.tif",
                  output_file="output/rho.tif",
                  csize_orig=10L, csize_new=1L)
 
@@ -906,12 +905,12 @@ df_mod_valid
 Models + environmental variables (raster) => probabilities
 
 ```{r prob, results="hide"}
-mod <- c("glm", "rf", "rfxy")
+mod <- c("glm","rf","rfxy")
+model <- list(mod_glm, mod_rf, mod_rfxy)
 for (i in 1:length(mod)) {
   cat(glue("Probability in 2010: {mod[i]}"),"\n")
   if (!file.exists("output/prob_{mod[i]}.tif")) {
-    
-    fig_prob <- far$predict_raster(glue("mod_{mod[i]}"), var_dir="data/model",
+    fig_prob <- far$predict_raster(model[[i]], var_dir="data/model",
                                    input_forest_raster="data/model/fordefor2010.tif",
                                    output_file=glue("output/prob_{mod[i]}.tif"),
                                    blk_rows=128L, transform=TRUE)
