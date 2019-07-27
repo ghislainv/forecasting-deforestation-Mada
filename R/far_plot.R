@@ -1,3 +1,12 @@
+#!/usr/bin/Rscript
+
+# ==============================================================================
+# author          :Ghislain Vieilledent
+# email           :ghislain.vieilledent@cirad.fr, ghislainv@gmail.com
+# web             :https://ghislainv.github.io
+# license         :GPLv3
+# ==============================================================================
+
 require(broom)
 require(glue)
 require(raster)

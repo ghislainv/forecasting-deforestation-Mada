@@ -11,7 +11,7 @@ output:
 bibliography: bib/biblio.bib
 biblio-style: bib/journal-of-applied-ecology.csl
 editor_options: 
-  chunk_output_type: inline
+  chunk_output_type: console
 ---
 
 ```{r setup, echo=FALSE, message=FALSE}
@@ -44,6 +44,45 @@ knitr::include_graphics("figures/by-sa.png")
 
 This tutorial is licensed under the [Creative Commons Attribution-ShareAlike 4.0 International License](http://creativecommons.org/licenses/by-sa/4.0/).
 
+## Computing environment
+
+### Installing Docker
+
+Docker is used to run software packages called "containers". Containers are isolated from each other and bundle their own tools, libraries and configuration files. Containers are created from "images" that specify their precise contents.
+
+To install Docker for your operating system, go to <https://docs.docker.com/install/>. For Windows user, go directly to <https://docs.docker.com/docker-for-windows/install/>.
+
+### Docker image
+
+For our tutorial, we have built a specific Docker image including R and Python:
+
+- R computing environment: R 3.5.1, RStudio, and various R packages (ex. knitr, ggplot2, reticulate).
+- Python computing environment: Python 3, and various Python packages (ex. numpy, pandas, matplotlib, and forestatrisk).
+
+Some computations, such as computation by blocks on large raster files, were more easily coded and faster with Python. That's why we decided to use Python as a complementary language to R. The `reticulate` R package allow us to use Python functions from R and thus to work in a single computing environment within RStudio.
+
+### Load the `forestatrisk` Docker image
+
+Download the image from internet with the following command in a terminal: `docker pull ghislainv/docker-forestatrisk .` (do not forget the final ".")
+
+Note: If the internet connection is slow, use a USB key and copy the image somewhere on your computer and load it with the following command: `docker load -i <path to image tar file>`
+
+Run the container with `docker run -d -e PASSWORD=PWD -e ROOT=true -p 8787:8787 -v ORIGIN_FOLDER:/home/rstudio ghislainv/docker-forestatrisk`.  
+
+Note:
+
+- Set your own password `PWD`, it cannot be `rstudio`.
+- Replace `ORIGIN_FOLDER` with a folder on your local machine where you want to save the R scripts. For example `/c/Users/YOUR_NAME` or `/home/YOUR_NAME`.
+
+Point your browser to `localhost:8787` to access RStudio interface. Log in with `rstudio/PWD`.
+
+Note on docker's containers and images:    
+
+- List running containers: `docker ps`
+- List images: `docker images` or `docker image list`
+- Stop container: `docker stop <id container>`
+- Remove container: `docker rm <idcontainer>`
+
 ### Get the tutorial
 
 In RStudio, open a terminal and clone the GitHub repository locally:  
@@ -51,15 +90,16 @@ In RStudio, open a terminal and clone the GitHub repository locally:
 
 Navigate with RStudio in the folder named `forecasting-deforestation-Mada` and open the R Notebook file named `training.Rmd`. R Markdown files (`*.Rmd`) can be used in R to embbed text, code, table and figues inside a unique document. Code are organized into 'chunks' that can be executed independently and interactively. An R Notebook is an R Markdown document with output visible immediately beneath the input. 
 
-I used this notebook to write the tutorial available at <https://forestatrisk.cirad.fr/tutorial>.
+I used this notebook to write the tutorial available at <https://ecology.ghislainv.fr/forecasting-deforestation-Mada>.
 
 In the preambule, change the author and date with your name and today's date.
-
-## Computing environment
 
 ### R libraries
 
 ```{r R_libraries, cache=FALSE}
+# Environmental variables
+Sys.unsetenv("DISPLAY") # Remove DISPLAY for Python plot
+
 # Libraries
 pkg <- c("reticulate","glue","curl","dplyr","readr","broom",
          "ggplot2","raster","rasterVis","rgdal","leaflet","kableExtra")
@@ -79,37 +119,13 @@ rm(pkg,load.pkg,loaded)
 source("R/far_plot.R")
 ```
 
-### Installing Python3 through Miniconda3
-
-To install Miniconda3 with Python3, follow the instructions here: https://conda.io/docs/user-guide/install/index.html
-
-Using functions from the `reticulate` R package, install the conda environment with a selection of Python packages.
-
-```{r condaenv}
-library(reticulate)
-if (!("forestatrisk" %in% conda_list()$name)) {
-  # Create conda virtual environment
-  conda_create("forestatrisk")
-	# Install python ackages in virtual environment
-	conda_pkg <- c("gdal","numpy","pandas","patsy","pip",
-	               "matplotlib", "scipy", "scikit-learn",
-	               "statsmodels")
-	conda_install("forestatrisk", conda_pkg, forge=FALSE)
-	# Install forestatrisk from git with pip
-  git_forestatrisk <- "https://github.com/ghislainv/forestatrisk/archive/master.zip"
-  conda_install("forestatrisk", git_forestatrisk, pip=TRUE,
-                pip_ignore_installed=FALSE)
-  py_discover_config(required_module="forestatrisk",
-                     use_environment="forestatrisk")
-}
-```
-
 ### Python in R
 
 Specify the Python version to use with reticulate and check that it is the right one.
 
 ```{r python_env}
-use_condaenv("forestatrisk")
+#use_condaenv("forestatrisk")
+use_condaenv("far")
 py_config()
 ```
 
@@ -120,7 +136,124 @@ far <- import("forestatrisk")
 patsy <- import("patsy")
 sm <- import("statsmodels.api")
 smf <- import("statsmodels.formula.api")
-plt <- import("matplotlib.pyplot")
+```
+
+### Difference between predictions in 2017
+
+```{r diff2017}
+mod <- c("icar", "glm")
+index_diff2017_30m <- NULL
+for (i in 1:length(mod)) {
+  cat(glue("Differences in 2017: {mod[i]}_obs"),"\n")
+  if (!file.exists(glue("output/diff2017_{mod[i]}_obs.tif"))) {
+    far$r_diffproj(inputA=glue("output/proj2017_{mod[i]}.tif"),
+                   inputB=glue("output/proj2017_obs.tif"),
+                   output_file=glue("output/diff2017_{mod[i]}_obs.tif"),
+                   blk_rows=64L)
+  }
+  confmat <- far$mat_diffproj(glue("output/diff2017_{mod[i]}_obs.tif"))
+  acc <- as.data.frame(far$accuracy(confmat)) %>% 
+    dplyr::select(OA, EA, FOM, Spe, Sen, TSS, K)
+  index_diff2017_30m <- rbind(index_diff2017_30m, acc)
+}
+acc_mod_30m <- index_diff2017_30m %>%
+  dplyr::mutate(res=rep(1,2), mod=mod) %>%
+  dplyr::select(8,9,1:7) %>%
+  tidyr::gather(OA, EA, FOM, Spe, Sen, TSS, K, key="index",value="value")
+write_csv(acc_mod_30m, "output/models_accuracy_30m.csv")
+```
+
+### Accuracy
+
+```{r resample_sum}
+dir.create("output/accuracy")
+dirout <- "output/accuracy"
+resolutions <- c(2, 5, 10, 25, 50, 100, 250, 500, 1000)
+models <- c("obs","icar","glm")
+# Resample
+for (i in 1:length(resolutions)) {
+  res <- resolutions[i]
+  for (j in 1:length(models)) {
+    mod <- models[j]
+    r_out <- glue("{dirout}/proj2017_{mod}_sum1_w{res}.tif")
+    if (!file.exists(r_out)) {
+      far$resample_sum(glue("output/proj2017_{mod}.tif"),
+                       glue("{dirout}/proj2017_{mod}_sum1_w{res}.tif"),
+                       val=1, window_size=as.integer(res))
+      far$resample_sum(glue("output/proj2017_{mod}.tif"),
+                       glue("{dirout}/proj2017_{mod}_sum0_w{res}.tif"),
+                       val=0, window_size=as.integer(res))
+    }
+  }
+}
+```
+
+```{r confusion_matrix}
+confmat_icar <- confmat_glm <- list()
+# Compute confusion matrix
+for (i in 1:length(resolutions)) {
+  res <- resolutions[i]
+  # icar
+  confmat_icar[[i]] <- far$confmat(
+      r_obs0=glue("{dirout}/proj2017_obs_sum0_w{res}.tif"),
+      r_obs1=glue("{dirout}/proj2017_obs_sum1_w{res}.tif"),
+      r_pred0=glue("{dirout}/proj2017_icar_sum0_w{res}.tif"),
+      r_pred1=glue("{dirout}/proj2017_icar_sum1_w{res}.tif"))
+  # glm
+  confmat_glm[[i]] <- far$confmat(
+      r_obs0=glue("{dirout}/proj2017_obs_sum0_w{res}.tif"),
+      r_obs1=glue("{dirout}/proj2017_obs_sum1_w{res}.tif"),
+      r_pred0=glue("{dirout}/proj2017_glm_sum0_w{res}.tif"),
+      r_pred1=glue("{dirout}/proj2017_glm_sum1_w{res}.tif"))
+}
+
+# Check number of cells
+lapply(confmat_icar, sum)
+lapply(confmat_glm, sum)
+
+# Save lists
+save(confmat_icar, confmat_glm, file="output/confmat.rda")
+```
+
+```{r accuracy}
+
+# Compute indices
+acc_mod <- NULL
+for (i in 1:length(resolutions)) {
+  acc <- as.data.frame(far$accuracy(confmat_glm[[i]])) %>%
+    dplyr::select(OA, EA, FOM, Spe, Sen, TSS, K)
+  acc_mod <- rbind(acc_mod, acc) 
+  acc <- as.data.frame(far$accuracy(confmat_icar[[i]])) %>%
+    dplyr::select(OA, EA, FOM, Spe, Sen, TSS, K)
+  acc_mod <- rbind(acc_mod, acc) 
+}
+acc_mod$mod <- rep(c("glm","icar"), 9)
+acc_mod$res <- rep(resolutions, each=2)
+acc_mod <- acc_mod %>%
+  tidyr::gather(OA, EA, FOM, Spe, Sen, TSS, K, key="index",value="value")
+
+# Export
+write_csv(acc_mod, "output/models_accuracy.csv")
+
+# At 30m resolution
+acc_mod_30m <- read_csv("output/models_accuracy_30m.csv")
+
+# Plot with ggplot2
+library(ggplot2)
+acc_mod <- read_csv("output/models_accuracy.csv") %>%
+  dplyr::bind_rows(acc_mod_30m) %>%
+  dplyr::filter(index %in% c("FOM", "OA"))
+p <- ggplot(acc_mod, aes(x=res, y=value, color=mod)) +
+  geom_line() + xlim(0,500) + facet_wrap(.~index, ncol=4, scales="free")
+ggsave("output/models_accuracy.png", p)
+
+# Todo:
+# - facet plot with indices
+# - compute mean indices with weighted mean per res
+# - indices for res=1
+# - transform res in m
+# - clean accuracy and validation
+  
 ```
 
 ### R/Python intro
@@ -141,6 +274,7 @@ b <- 1
 c <- a + b
 print(c)
 ```
+
 
 ##### Simple regression
 
@@ -228,7 +362,7 @@ knitr::kable(tab1, linesep="") %>%
 # Make data directory
 if (!dir.exists("data")) {
   dir.create("data")
-  dir.create("data/models")
+  dir.create("data/model")
   dir.create("data/mada")
   dir.create("data/validation")
 }
@@ -261,7 +395,7 @@ if (!file.exists("data/mada/mada38s.shp")) {
 }
 ```
 
-In our example, `fordefor.tif` is a forest raster at 30m for the year 2010 considering the deforestation on the period 2000-2010 in Madagascar. We can plot this raster and zoom on a region with function `.plot.forest()` in the `forestatrisk` package to see the deforestation data. The remaining forest appears in green and the deforested areas appear in red.
+In our example, `fordefor2010.tif` is a forest raster at 30m for the year 2010 considering the deforestation on the period 2000-2010 in Madagascar. We can plot this raster and zoom on a region with function `.plot.forest()` in the `forestatrisk` package to see the deforestation data. The remaining forest appears in green and the deforested areas appear in red.
 
 ```{r plot_fcc}
 # Make output directory
@@ -269,7 +403,7 @@ if (!dir.exists("output")) {
   dir.create("output")
 }
 # Plot forest cover change 2000-2010
-fig <- far$plot$fcc(input_fcc_raster="data/models/2000-2010/fordefor.tif",
+fig <- far$plot$fcc(input_fcc_raster="data/model/fordefor2010.tif",
              output_file="output/fcc.png",
              col=c(255,0,0,255),  # rgba color for deforestation
              figsize=c(5,5),
@@ -286,21 +420,22 @@ The `.sample()` function also extracts information from environmental variables 
 
 The `.sample()` function identifies the spatial cell for each sample point (sample point are grouped within a spatial cell). Spatial cells and grouped observations are used to estimate the spatial autocorrelation of the deforestation process. The `csize` argument define the width (in km) of the square spatial cells. Each spatial cell will be attributed a parameter. To avoid estimating too many parameters, width of the square spatial cells must be sufficiently large. Both points sampling and extraction of environmental data are done by block to avoid memory problems for big datasets.
 
-```{python help-sample"}
-import forestatrisk as far
-help(far.sample)
+```{python help, engine.path="/usr/bin/python3"}
+import forestatrisk
+help(forestatrisk.sample)
 ```
 
+
 ```{r sampling, results="hide"}
-# Training and validation data-set
-if (!file.exists("output/sample-2000-2010.txt")) {
+# Training data-set
+if (!file.exists("output/sample.txt")) {
   samp <- far$sample(nsamp=20000L, Seed=1234L, csize=10L,
-                     var_dir="data/models/2000-2010",
-                     input_forest_raster="fordefor.tif",
-                     output_file="output/sample-2000-2010.txt",
+                     var_dir="data/model",
+                     input_forest_raster="fordefor2010.tif",
+                     output_file="output/sample.txt",
                      blk_rows=1L)
 }
-samp <- read.table("output/sample-2000-2010.txt", header=TRUE, sep=",")
+samp <- read.table("output/sample.txt", header=TRUE, sep=",")
 set.seed(1234)
 train <- sample(1:40000, size=20000, replace=FALSE)
 data_train <- samp[train,] %>% dplyr::filter(complete.cases(.))
@@ -316,14 +451,15 @@ Sampled observations can be plotted using function `.plot.obs()` from the forest
 ```{r plot_sample}
 # Plot sample points
 fig <- far$plot$obs(sample=data_train,
-             name_forest_var="fordefor",
-             input_fcc_raster="data/models/2000-2010/fordefor.tif",
+             name_forest_var="fordefor2010",
+             input_fcc_raster="data/model/fordefor2010.tif",
              output_file="output/obs.png",
              zoom=c(340000,412000,7420000,7500000),
              figsize=c(5,5),#c(11.69,8.27),
              s=5,dpi=300)
 knitr::include_graphics("output/obs.png")
 ```
+
 
 ### Descriptive statistics
 
@@ -333,13 +469,16 @@ Before modelling the deforestation, it is important to look at the relationship 
 # Descriptive statistics
 
 # Model formulas
-formula_1 <- paste0("fordefor ~ dist_road + dist_town + dist_defor +",
+formula_1 <- paste0("fordefor2010 ~ dist_road + dist_town + dist_defor +",
                     "dist_river + dist_edge + altitude + slope - 1")
 # Standardized variables (mean=0, std=1)
-formula_2 <- paste0("fordefor ~ scale(dist_road) + scale(dist_town) +",
+formula_2 <- paste0("fordefor2010 ~ scale(dist_road) + scale(dist_town) +",
                     "scale(dist_defor) + scale(dist_river) + scale(dist_edge) +",
                     "scale(altitude) + scale(slope) - 1")
 formulas <- c(formula_1, formula_2)
+
+# List to store figures
+corr_fig <- list()
 
 # Loop on formulas
 for (f in 1:length(formulas)) {
@@ -355,7 +494,7 @@ for (f in 1:length(formulas)) {
 }
 ```
 
-In this example (see pdf files produced), we can see that a linear model should be sufficient to represent the relationship between the probability of deforestation and the standardized distance to the nearest road or town. On the contrary, it might be interesting to fit a polynomial model for the the standardized distance to previous deforestation (`dist_defor` variable) for which the relationship seems non-linear. Several models can be fitted and compared to see if a second-order or third-order polynomial relationship is justified.
+In this example (see pdf files produced), we can see that a linear model should be sufficient to represent the relationship between the probability of deforestation and the standardized distance to the nearest road or town. On the contrary, it could be interesting to fit a polynomial model for the the standardized distance to previous deforestation (`dist_defor` variable) for which the relationship seems non-linear. Several models can be fitted and compared to see if a second-order or third-order polynomial relationship is justified.
 
 ## Deforestation model
 
@@ -416,7 +555,7 @@ Before running the model, we add a column indicating the number of trials for ea
 
 ```{r spatial_cells}
 # Spatial cells for spatial-autocorrelation
-neighborhood <- far$cellneigh_ctry(raster="data/models/2000-2010/fordefor.tif",
+neighborhood <- far$cellneigh_ctry(raster="data/model/fordefor2010.tif",
                                    vector="data/mada/mada38s.shp",
                                    csize=10L, rank=1L)
 nneigh <- neighborhood[[1]]
@@ -446,8 +585,10 @@ A model formula must also be defined to specify the explicative variables we wan
 ```{r formula}
 # Formula
 data_train$trials <- 1  # Set number of trials to one
-formula <- paste0("I(1-fordefor) + trials ~ C(sapm) + scale(altitude) + ",
-                  "scale(slope) + scale(dist_defor) + scale(dist_edge) + ",
+formula <- paste0("I(1-fordefor2010) + trials ~ C(sapm) + scale(altitude) +
+                  scale(slope) +",
+                  "scale(dist_defor) + np.power(scale(dist_defor),2) + ",
+                  "scale(dist_edge) + ",
                   "scale(dist_road) + scale(dist_town) + cell")
 ```
 
@@ -463,8 +604,7 @@ mod_icar <- far$model_binomial_iCAR(
   # Environment
   eval_env=-1L,
   # Chains
-  #burnin=2000L, mcmc=5000L, thin=5L,
-  burnin=1000L, mcmc=1000L, thin=1L,
+  burnin=2000L, mcmc=5000L, thin=5L,
   # Starting values
   beta_start=-99)
 ```
@@ -509,7 +649,7 @@ rho <- rep(-9999,ncell)  # -9999 will be considered as nodata
 rho[cell_in+1] <- mod_icar$rho
 
 # Resample them
-fig <- far$interpolate_rho(rho=r_to_py(rho), input_raster="data/models/2000-2010/fordefor.tif",
+fig <- far$interpolate_rho(rho=r_to_py(rho), input_raster="data/model/fordefor2010.tif",
                  output_file="output/rho.tif",
                  csize_orig=10L, csize_new=1L)
 
@@ -528,16 +668,16 @@ rho_plot(r.rho, mada, output_file="output/rho_ggplot.png",
 
 ```
 
-### Spatial probability of deforestation in 2010
+### Computing spatial probability of deforestation
 
 The `.predict_raster_binomial_icar()` function of the `forestatrisk` module can be used to predict the spatial probability of deforestation from an **hSDM_binomial_icar** model (i.e. an object of class `hSDM_binomial_icar`). The function writes a raster of predictions to the disk. The prediction is done by block to avoid memory problems for big datasets. Functions will return NA for pixels with no forest or for pixels with missing environmental variables.
 
 ```{r compute_predictions}
 if (!file.exists("output/prob_icar.tif")) {
   far$predict_raster_binomial_iCAR(
-    mod_icar, var_dir="data/models/2000-2010",
+    mod_icar, var_dir="data/model",
     input_cell_raster="output/rho.tif",
-    input_forest_raster="data/models/2000-2010/fordefor.tif",
+    input_forest_raster="data/model/fordefor2010.tif",
     output_file="output/prob_icar.tif",
     blk_rows=128L)
 }
@@ -602,57 +742,13 @@ m <- leaflet() %>% addTiles() %>%
 m
 ```
 
-## Model comparison
+## Model performance
 
-### Model types
+#### Deviance explained
 
-- null model
-- glm model: simple glm with no spatial random effect model
+With our model, we found a deviance of 9580.
 
-```{r null_model, cache=FALSE}
-# Null model
-formula_null <- "I(1-fordefor2010) ~ 1"
-dmat_null <- patsy$dmatrices(formula_null, data=r_to_py(data_train), NA_action="drop",
-                             return_type="dataframe", eval_env=-1L)
-Y <- dmat_null[[1]]
-X_null <- dmat_null[[2]]
-mod_null <- sm$GLM(Y, X_null, family=sm$families$Binomial())$fit()
-print(mod_null$summary())
-```
-
-```{r glm_model, cache=FALSE}
-# Simple glm with no spatial random effects
-formula_glm <- paste0("I(1-fordefor2010) ~ C(sapm) + scale(altitude) + ",
-                       "scale(slope) + scale(dist_defor) + ",
-                       "scale(dist_edge) + scale(dist_road) + scale(dist_town)")
-mod_glm <- smf$glm(formula_glm, r_to_py(data_train),
-									 family=sm$families$Binomial(), eval_env=-1L)$fit()
-# Summary glm
-sink(file="output/summary_mod_binomial_glm.txt")
-print(mod_glm$summary())
-sink()
-print(mod_glm$summary())
-```
-
-### Deviance explained
-
-```{r deviance}
-# Deviances
-deviance_null <- mod_null$deviance
-deviance_glm <- mod_glm$deviance
-deviance_icar <- mod_icar$deviance
-deviance_full <- 0
-# Table
-dev <- c(deviance_null, deviance_glm, deviance_icar, deviance_full)
-mod_dev <- data.frame(model=c("null", "glm", "icar", "full"),
-                  deviance=round(dev))
-perc <- 100*(1-mod_dev$deviance/deviance_null)
-mod_dev$perc <- round(perc)
-write.table(mod_dev,file="output/deviance_model_comparison.txt",sep=",",row.names=FALSE)
-mod_dev
-```
-
-### Spatial cross-validation 
+#### Spatial validation 
 
 Using the validation data-set, we can compute several model performance indices [@Liu2011]:
 
@@ -673,37 +769,17 @@ knitr::include_graphics("figures/Pontius2008-ARS-FOM.png")
 
 In our case, we compute these indices for various values of the deforestation rate (in percentage of deforestation observations) in our validation data-set (1, 5, 10, 25, 50). For each percentage, the threshold used to convert the predicted probabilities of deforestation were choosen in order to respect the deforestation rate (in %) in the observations.   
 
-```{r spatial-cross-validation}
+```{r model_perf, cache=FALSE}
 source("R/perf.R")
-set.seed(1234)
-performance_null <- performance_index(data_valid,runif(nrow(data_valid)))
-performance_nochange <- performance_index(data_valid,rep(0,nrow(data_valid)))
-theta_pred <- rep(0,nrow(data_valid))
-performance_glm <- performance_index(data_valid,mod_glm$predict(data_valid))
-performance_icar <-performance_index(data_valid,mod_icar$predict(data_valid))
-# Save
-write.table(performance_null, file="output/performance_null.txt",
-			sep="\t", row.names=FALSE)
-write.table(performance_nochange, file="output/performance_nochange.txt",
-			sep="\t", row.names=FALSE)
-write.table(performance_glm, file="output/performance_glm.txt",
-			sep="\t", row.names=FALSE)
-write.table(performance_icar, file="output/performance_icar.txt",
-			sep="\t", row.names=FALSE)
-# Save for perc=10%
-df_mod_valid <- rbind(performance_null[3,],performance_nochange[3,],
-					  performance_glm[3,],
-					  performance_icar[3,])
-df_mod_valid <- df_mod_valid %>%
-	dplyr::mutate(mod=c("null","nochange","glm","icar")) %>%
-	dplyr::select(10,2:9)
-write.table(df_mod_valid, file="output/df_mod_valid.txt", sep="\t", row.names=FALSE)
 
-# Print
-df_mod_valid
+# Performance icar
+set.seed(1234)
+performance_icar <- performance_index(data_valid,theta_pred=mod_icar$predict(data_valid))
+write.table(performance_icar,file="output/performance_icar.txt")
+performance_icar
 ```
 
-### Temporal validation
+#### Temporal validation
 
 Considering the period 2010-2017, we can compare model's predictions in the future with the observed deforestation on the same period. 
 
@@ -758,6 +834,109 @@ indices_2010_2017_icar <- far$validation(pred="output/proj2017_icar.tif",
                                          obs="output/proj2017_obs.tif",
                                          blk_rows=128L)
 as.data.frame(indices_2010_2017_icar)
+```
+
+## Model comparison
+
+### Model types
+
+- null model
+- glm model: simple glm with no spatial random effect model
+- rf model: random forest model with no x,y
+- rfxy: random forest model with x,y
+
+```{r null_model, cache=FALSE}
+# Null model
+formula_null <- "I(1-fordefor2010) ~ 1"
+dmat_null <- patsy$dmatrices(formula_null, data=r_to_py(data_train), NA_action="drop",
+                             return_type="dataframe", eval_env=-1L)
+Y <- dmat_null[[1]]
+X_null <- dmat_null[[2]]
+mod_null <- sm$GLM(Y, X_null, family=sm$families$Binomial())$fit()
+print(mod_null$summary())
+```
+
+```{r glm_model, cache=FALSE}
+# Simple glm with no spatial random effects
+formula_glm <- paste0("I(1-fordefor2010) ~ C(sapm) + scale(altitude) + ",
+                       "scale(slope) + scale(dist_defor) + I(scale(dist_defor)*scale(dist_defor)) + ",
+                       "scale(dist_edge) + scale(dist_road) + scale(dist_town)")
+mod_glm <- smf$glm(formula_glm, r_to_py(data_train),
+									 family=sm$families$Binomial(), eval_env=-1L)$fit()
+# Summary glm
+sink(file="output/summary_mod_binomial_glm.txt")
+print(mod_glm$summary())
+sink()
+print(mod_glm$summary())
+```
+
+```{r rf_model, cache=FALSE}
+formula_rf <- paste0("I(1-fordefor2010) ~ 0 + sapm + altitude + ",
+                     "slope + dist_defor + dist_edge + dist_road + dist_town")
+mod_rf <- far$model_random_forest(formula=formula_rf, data=data_train, 
+                              eval_env=-1L, n_estimators=100L, n_jobs=2L)
+```
+
+```{r rfxy_model, cache=FALSE}
+# formula_rfxy <- paste0("I(1-fordefor2010) ~ 0 + sapm + altitude + ",
+#                         "slope + dist_defor + dist_edge + dist_road + dist_town + X + Y")
+formula_rfxy <- paste0("I(1-fordefor2010) ~ 0 + X + Y")
+mod_rfxy <- far$model_random_forest(formula=formula_rfxy, data=data_train, 
+                                 eval_env=-1L, n_estimators=100L, n_jobs=2L)
+```
+
+### Deviance explained
+
+```{r deviance}
+# Deviances
+deviance_null <- mod_null$deviance
+deviance_glm <- mod_glm$deviance
+deviance_icar <- mod_icar$deviance
+deviance_full <- 0
+# Table
+dev <- c(deviance_null, deviance_glm, deviance_icar, deviance_full)
+mod_dev <- data.frame(model=c("null", "glm", "icar", "full"),
+                  deviance=round(dev))
+perc <- 100*(1-mod_dev$deviance/deviance_null)
+mod_dev$perc <- round(perc)
+write.table(mod_dev,file="output/deviance_model_comparison.txt",sep=",",row.names=FALSE)
+mod_dev
+```
+
+### Spatial validation
+
+```{r perf_models}
+performance_null <- performance_index(data_valid,runif(nrow(data_valid)))
+performance_nochange <- performance_index(data_valid,rep(0,nrow(data_valid)))
+performance_glm <- performance_index(data_valid,mod_glm$predict(data_valid))
+performance_rf <- performance_index(data_valid,mod_rf$predict(data_valid))
+performance_rfxy <- performance_index(data_valid,mod_rfxy$predict(data_valid))
+performance_icar <-performance_index(data_valid,mod_icar$predict(data_valid))
+# Save
+write.table(performance_null, file="output/performance_null.txt",
+						sep="\t", row.names=FALSE)
+write.table(performance_nochange, file="output/performance_nochange.txt",
+						sep="\t", row.names=FALSE)
+write.table(performance_glm, file="output/performance_glm.txt",
+						sep="\t", row.names=FALSE)
+write.table(performance_rf, file="output/performance_rf.txt",
+						sep="\t", row.names=FALSE)
+write.table(performance_rfxy, file="output/performance_rfxy.txt",
+						sep="\t", row.names=FALSE)
+write.table(performance_icar, file="output/performance_icar.txt",
+						sep="\t", row.names=FALSE)
+# Save for perc=10%
+df_mod_valid <- rbind(performance_null[3,],performance_nochange[3,],
+                      performance_glm[3,],
+                      performance_rf[3,],performance_rfxy[3,],
+                      performance_icar[3,])
+df_mod_valid <- df_mod_valid %>%
+  dplyr::mutate(mod=c("null","nochange","glm","rf","rfxy","icar")) %>%
+  dplyr::select(10,2:9)
+write.table(df_mod_valid, file="output/df_mod_valid.txt", sep="\t", row.names=FALSE)
+
+# Print
+df_mod_valid
 ```
 
 ### Temporal validation
